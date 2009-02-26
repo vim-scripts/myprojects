@@ -1,0 +1,8 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=2556
+
+You can use it to set up a list of frequently-accessed files for easy navigation.
+The list of files will be displayed in a window on the left side of the Vim window.
+Unlike project.vim, myprojects.vim use indentation instead of mark to define folder.
+Main features are file exploration, tags generation, filtering, working directory definition, vim session management, F1 to F12 mapping definition, make definition, errorformat definition, buffers explorer and svn checkout/update/add/commit/revert/diff/blame/info/resolved/log support.
+Please, report any bug to myprojects.vim[..at..]mageekbox.net.
+Help for debug is welcome !
