@@ -1,8 +1,10 @@
 "=============================================================================
 " File:        myprojects.vim
 " Author:      Frédéric Hardy (fhardy at noparking.net)
-" Last Change: Thu Feb 26 09:23:02 CET 2009
-" Version:     0.0.1
+" Last Change: Mon Mar  2 09:37:42 CET 2009
+" Version:     0.0.10
+" Licence:     GPL version 2.0 license
+" GetLatestVimScripts: 2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
 if !exists('myprojects_enable')
 	let s:buffer = -1
@@ -11,7 +13,7 @@ if !exists('myprojects_enable')
 	command -nargs=? -complete=file MyProjectsToggle call <SID>toggle('<args>')
 
 	if !hasmapto('<Plug>MyProjectsToggle')
-		map <unique> <silent> <Leader>t <Plug>MyProjectsToggle
+		map <unique> <silent> <Leader>p <Plug>MyProjectsToggle
 	endif
 
 	noremap <unique> <script> <Plug>MyProjectsToggle <SID>toggle
@@ -28,6 +30,10 @@ if !exists('myprojects_enable')
 		let g:myprojects_width = 30
 	endif
 
+	if !exists('g:myprojects_file')
+		let g:myprojects_file = '~/.myprojects'
+	endif
+
 	if !exists('g:myprojects_tags_file')
 		let g:myprojects_tags_file = '.tags'
 	endif
@@ -35,7 +41,7 @@ if !exists('myprojects_enable')
 	function s:myProjects(filename)
 		if s:goToWindow() < 0
 			if a:filename == ''
-				let s:filename ='~/.myprojects'
+				let s:filename = g:myprojects_file
 			else
 				let s:filename = a:filename
 			endif
@@ -57,10 +63,13 @@ if !exists('myprojects_enable')
 			nnoremap <buffer> <silent> <C-t> :call <SID>generateTags(line('.'))<CR>
 			nnoremap <buffer> <silent> <C-e> :call <SID>explore('E')<CR>
 			nnoremap <buffer> <silent> <C-S-e> :call <SID>explore('Se')<CR>
-			nnoremap <buffer> <silent> <C-Tab> :call <SID>goToPreviousWindow()<CR>
 			nnoremap <buffer> <silent> <C-A-p> :call <SID>updatePath(line('.'), 1)<CR>
 			nnoremap <buffer> <silent> <C-A-f> :call <SID>updateFilter(line('.'), 1)<CR>
 			nnoremap <buffer> <silent> <C-A-c> :call <SID>updateCd(line('.'))<CR>
+			nnoremap <buffer> <silent> <C-A-m> :call <SID>updateMappings(line('.'))<CR>
+			nnoremap <buffer> <silent> <C-Tab> :call <SID>goToPreviousWindow()<CR>
+			nnoremap <buffer> <silent> <C-Up> :call <SID>moveUp(line('.'))<CR>
+			nnoremap <buffer> <silent> <C-Down> :call <SID>moveDown(line('.'))<CR>
 
 			setlocal autoindent
 			setlocal autoread
@@ -199,11 +208,11 @@ if !exists('myprojects_enable')
 
 	function s:foldexpr()
 		let currentIndent = indent(v:lnum) / &tabstop
-		let nextIndent = indent(v:lnum + 1) / &tabstop
+		let nextIndent = indent(nextnonblank(v:lnum + 1)) / &tabstop
 		return currentIndent >= nextIndent ? currentIndent : '>' . nextIndent
 	endfunction
 
-	function! s:toggle(filename)
+	function s:toggle(filename)
 		let window = s:goToWindow()
 
 		call s:myProjects(a:filename)
@@ -214,11 +223,11 @@ if !exists('myprojects_enable')
 	endfunction
 
 	function s:getFolderLine(line)
+		let line = 0
+
 		let indent = indent(a:line)
 
-		if indent <= 0
-			let line = 0
-		else
+		if indent > 0
 			let line = a:line
 
 			while line > 0 && indent(line) >= indent
@@ -256,15 +265,15 @@ if !exists('myprojects_enable')
 		return getline(a:line) =~ '^\s*[^=]\+=\(\(\\ \|\f\)\+\).*$'
 	endfunction
 
+	function s:extractPathFromLine(line)
+		return !s:hasPath(a:line) ? '' : substitute(getline(a:line), '^\s*[^=]\+=\(\(\\ \|\f\)\+\).*$', '\1', '')
+	endfunction
+
 	function s:extractPath(line)
-		let path = s:getName(a:line)
+		let path = s:extractPathFromLine(a:line)
 
-		if path != ''
-			let entry = getline(a:line)
-
-			if s:hasPath(a:line)
-				let path = substitute(getline(a:line), '^\s*[^=]\+=\(\(\\ \|\f\)\+\).*$', '\1', '')
-			endif
+		if path == ''
+			let path = s:getName(a:line)
 		endif
 
 		return path
@@ -274,16 +283,17 @@ if !exists('myprojects_enable')
 		return s:isFolder(a:line) && getline(a:line) =~ '.*\s\+' . a:name . '="[^"]\+"'
 	endfunction
 
+	function s:extractAttributeFromLine(name, line)
+		return !s:hasAttribute(a:name, a:line) ? '' : substitute(getline(a:line), '.*\s\+' . a:name . '="\([^"]\+\)".*', '\1', '')
+	endfunction
+
 	function s:extractAttribute(name, line)
 		let attribute = ''
 		let line = a:line + 1
 
 		while line > 0 && indent(line) > 0 && attribute == ''
 			let line -= 1
-
-			if s:hasAttribute(a:name, line)
-				let attribute = substitute(getline(line), '.*\s\+' . a:name . '="\([^"]\+\)".*', '\1', '')
-			endif
+			let attribute = s:extractAttributeFromLine(a:name, line)
 		endwhile
 
 		return attribute
@@ -293,20 +303,23 @@ if !exists('myprojects_enable')
 		return s:hasAttribute('cd', a:line)
 	endfunction
 
+	function s:extractCdFromLine(line)
+		let cd = s:extractAttributeFromLine('cd', a:line)
+
+		if cd == '.'
+			let cd = s:getPath(a:line)
+		endif
+
+		return cd
+	endfunction
+
 	function s:extractCd(line)
 		let cd = ''
 		let line = a:line + 1
 
 		while line > 0 && indent(line) > 0 && cd == ''
 			let line -= 1
-
-			if s:hasCd(line)
-				let cd = substitute(getline(line), '.*\s\+cd="\([^"]\+\)".*', '\1', '')
-
-				if cd == '.'
-					let cd = s:getPath(line)
-				endif
-			endif
+			let cd = s:extractCdFromLine(line)
 		endwhile
 
 		return cd
@@ -316,37 +329,58 @@ if !exists('myprojects_enable')
 		return s:hasAttribute('filter', a:line)
 	endfunction
 
+	function s:extractFilterFromLine(line)
+		return s:extractAttributeFromLine('filter', a:line)
+	endfunction
+
 	function s:extractFilter(line)
 		return s:extractAttribute('filter', a:line)
 	endfunction
 
-	function s:hasLanguage(line)
-		return s:hasAttribute('language', a:line)
+	function s:hasMapping(mapping, line)
+		return s:hasAttribute(a:mapping, a:line)
 	endfunction
 
-	function s:extractLanguage(line)
-		return s:extractAttribute('language', a:line)
+	function s:extractMappingsFromLine(line)
+		let mappings = {}
+
+		let line = getline(a:line)
+
+		if line != ''
+			let index = 1
+
+			while index <= 12
+				if s:hasMapping('F' . index, a:line)
+					let mapping = substitute(line, '.*\s\+F' . index . '="\([^"]\+\)".*', '\1', '')
+
+					if mapping != ''
+						let mappings[index] = mapping
+					endif
+				endif
+
+				let index += 1
+			endwhile
+		endif
+
+		return mappings
 	endfunction
 
-	function s:hasFunction(function, line)
-		return s:hasAttribute(a:function, a:line)
-	endfunction
+	function s:extractMappings(line)
+		let mappings = {}
 
-	function s:extractFunctions(line)
-		let functions = {}
 		let line = a:line + 1
 
-		while line > 0 && indent(line) > 0
+		while line > 0 && indent(line) > 0 && len(mappings) < 12
 			let line -= 1
 
 			let index = 1
 
 			while index <= 12
-				if !has_key(functions, index) && s:hasFunction('F' . index, line)
-					let function = substitute(getline(line), '.*\s\+F' . index . '="\([^"]\+\)".*', '\1', '')
+				if !has_key(mappings, index) && s:hasMapping('F' . index, line)
+					let mapping = substitute(getline(line), '.*\s\+F' . index . '="\([^"]\+\)".*', '\1', '')
 
-					if function != ''
-						let functions[index] = function
+					if mapping != ''
+						let mappings[line] = {index : mapping}
 					endif
 				endif
 
@@ -354,14 +388,14 @@ if !exists('myprojects_enable')
 			endwhile
 		endwhile
 
-		return functions
+		return mappings
 	endfunction
 
 	function s:isFolder(line)
-		return indent(a:line) < indent(a:line + 1)
+		return indent(a:line) < indent(nextnonblank(a:line + 1))
 	endfunction
 
-	function s:buildFolder(name, level, path, addPath, cd, addCd, filter, addFilter)
+	function s:buildFolder(name, level, path, addPath, cd, addCd, filter, addFilter, functions, folderAttributes)
 		let folder = ''
 
 		let cwd = getcwd()
@@ -370,10 +404,22 @@ if !exists('myprojects_enable')
 
 		for inode in sort(split(glob('*'), "\n"))
 			if isdirectory(inode)
-				let files = s:buildFolder(inode, a:level + 1, a:path . '/' . inode, 0, '', 0, a:filter, 0)
+				let path = a:path . '/' . inode
+
+				if !has_key(a:folderAttributes, path)
+					let cd = ''
+					let filter = a:filter
+					let functions = {}
+				else
+					let cd = a:folderAttributes[path]['cd'] == path ? '.' : a:folderAttributes[path]['cd']
+					let filter = a:folderAttributes[path]['filter']
+					let functions = a:folderAttributes[path]['functions']
+				endif
+
+				let files = s:buildFolder(inode, a:level + 1, a:path . '/' . inode, 0, cd, cd != '', filter, filter != '' && filter != a:filter, functions, a:folderAttributes)
 
 				if files != ''
-					let folder .= "\n" . s:buildFolder(inode, a:level + 1, a:path . '/' . inode, 0, '', 0, a:filter, 0)
+					let folder .= "\n" . files
 				endif
 			elseif a:filter == '' || match(inode, a:filter) != -1
 				let folder .= "\n" . repeat('	', a:level + 1) . inode
@@ -395,6 +441,12 @@ if !exists('myprojects_enable')
 
 			if a:addFilter
 				let name .= ' filter="' . a:filter . '"'
+			endif
+
+			if len(a:functions) > 0
+				for [index, value] in items(a:functions)
+					let name .= ' F' . index . '="' . value . '"'
+				endfor
 			endif
 
 			let folder = name . folder
@@ -428,7 +480,7 @@ if !exists('myprojects_enable')
 					let filter = input('Filter :')
 
 					echomsg 'Create project ' . name . ' from path ' . path . ', please wait...'
-					call s:appendFolder(s:buildFolder(name, 0, path, 1, cd, cd != '', filter, filter != ''), line)
+					call s:appendFolder(s:buildFolder(name, 0, path, 1, cd, cd != '', filter, filter != '', s:defineMappings({}), {}), line)
 					echomsg 'Project ' . name . ' created.'
 				endif
 			endif
@@ -459,6 +511,8 @@ if !exists('myprojects_enable')
 		let cd = addCd ? s:extractCd(line) : ''
 		let addFilter = s:hasFilter(line)
 		let filter = addFilter ? s:extractFilter(line) : ''
+		let functions = s:extractMappingsFromLine(line)
+		let folderAttributes = s:getFolderAttributes(line)
 
 		call s:goToLine(line)
 
@@ -470,7 +524,7 @@ if !exists('myprojects_enable')
 
 		if getftype(path) == 'dir'
 			echomsg 'Refresh ' . path . ' in project ' . s:getProjectName(line) . ', please wait...'
-			call s:appendFolder(s:buildFolder(name, level, path, addPath, cd, addCd, filter, addFilter), line)
+			call s:appendFolder(s:buildFolder(name, level, path, addPath, cd, addCd, filter, addFilter, functions, folderAttributes), line)
 			echomsg path . ' was refreshed.'
 		endif
 	endfunction
@@ -484,7 +538,7 @@ if !exists('myprojects_enable')
 			let path = s:getPath(line)
 			let rootPath = s:getRootPath(line)
 			let cd = s:extractCd(line)
-			let functions = s:extractFunctions(line)
+			let mappings = s:extractMappings(line)
 			let split = a:split == '' ? 'edit' : a:split
 			let window = bufwinnr(path)
 
@@ -507,16 +561,24 @@ if !exists('myprojects_enable')
 			endif
 
 			if g:myprojects_tags_file != '' && rootPath != ''
-				silent execute 'setlocal tags=' . rootPath . '/' . g:myprojects_tags_file
+				let tagsPath = rootPath . '/' . g:myprojects_tags_file
+
+				if getftype(tagsPath) == 'file'
+					silent execute 'setlocal tags=' . rootPath . '/' . g:myprojects_tags_file
+				endif
 			endif
 
 			setlocal more
 
-			for [key, value] in items(functions)
-				execute 'nmap <buffer> <silent> <F' . key . '> :!' . value . ' ' . expand('%:p') . ' 2>&1<CR>'
+			for [line, mapping] in items(mappings)
+				for [key, value] in items(mapping)
+					execute 'nmap <buffer> <silent> <F' . key . '> ' . expand(value)
+				endfor
 			endfor
 
-			nnoremap <buffer> <silent> <C-Tab> :call <SID>goHome()<CR>
+			if !hasmapto('<Plug>MyProjectsGoHome')
+				map <buffer> <silent> <C-Tab> <Plug>MyProjectsGoHome
+			endif
 		endif
 	endfunction
 
@@ -654,12 +716,32 @@ if !exists('myprojects_enable')
 		endif
 	endfunction
 
+	function s:updateMappings(line)
+		let lines = {}
+		let currentMappings = {}
+
+		for [line, mappings] in items(s:extractMappings(a:line))
+			for [key, mapping] in items(mappings)
+				if mapping != ''
+					let mappings[key] = mapping
+					let lines[key] = line
+				endif
+			endfor
+		endfor
+
+		for [key, mapping] in items(s:defineMappings(mappings))
+			if has_key(lines, key)
+				call s:updateAttribute(lines[key], 'F' . key, mapping)
+			endif
+		endfor
+	endfunction
+
 	function s:updateAttribute(line, attribute, value)
 		if getline(a:line) =~ '\s\+' . a:attribute . '="[^"]\+"'
 			if a:value == ''
 				call s:substitute(a:line, '\s\+' . a:attribute . '="[^"]\+"', '', '')
 			else
-				call s:substitute(a:line, '\s\+' . a:attribute . '="[^"]\+"', ' ' . a:attribute . '="' . a:value . '"', '')
+				call s:substitute(a:line, '\s\+' . a:attribute . '="[^"]\+"', ' ' . a:attribute . '="' . escape(a:value, '|&') . '"', '')
 			endif
 		elseif a:value != ''
 			call s:substitute(a:line, '\(^.\+$\)', '\1 ' . a:attribute . '="' . a:value . '"', '')
@@ -730,7 +812,7 @@ if !exists('myprojects_enable')
 
 	function s:SID()
 		return matchstr(expand('<sfile>'), '<SNR>\d\+_\zeSID$')
-	endfun
+	endfunction
 
 	function s:substitute(line, search, replace, flags)
 		let line = line('.')
@@ -773,7 +855,106 @@ if !exists('myprojects_enable')
 		return path
 	endfunction
 
-	function s:getTree(line)
+	function s:moveUp(line)
+		let isFolder = s:isFolder(a:line)
+
+		if isFolder && foldclosed(a:line) == -1
+			normal! zc
+		endif
+
+		normal! dd
+		normal! k
+		normal! P
+
+		if isFolder
+			normal! zc
+		endif
+	endfunction
+
+	function s:moveDown(line)
+		let isFolder = s:isFolder(a:line)
+
+		if isFolder && foldclosed(a:line) == -1
+			normal! zc
+		endif
+
+		normal! dd
+		normal! p
+
+		if isFolder
+			normal! zc
+		endif
+	endfunction
+
+	function s:getFolderAttributes(line)
+		let paths = {}
+
+		let line = a:line
+
+		if !s:isFolder(line)
+			let line = s:getFolderLine(line)
+		endif
+
+		if line > 0
+			let folderIndent = indent(line)
+
+			if folderIndent != -1
+				let paths[s:getPath(line)] = {'path': s:extractPathFromLine(line), 'cd': s:extractCdFromLine(line), 'filter': s:extractFilterFromLine(line), 'functions': s:extractMappingsFromLine(line)}
+
+				let line += 1
+
+				while indent(line) > folderIndent
+					if s:isFolder(line)
+						let paths[s:getPath(line)] = {'path': s:extractPathFromLine(line), 'cd': s:extractCdFromLine(line), 'filter': s:extractFilterFromLine(line), 'functions': s:extractMappingsFromLine(line)}
+					endif
+
+					let line += 1
+				endwhile
+			endif
+		endif
+
+		return paths
+	endfunction
+
+	function s:defineMappings(mappings)
+		let mappings = a:mappings
+
+		if len(mappings) <= 0
+			let key = 1
+
+			while key <= 12
+				let mappings[key] = ''
+			endwhile
+		endif
+
+		let index = 1
+
+		while index >= 1 && index <= 13
+			let list = ['Define mapping for key: ']
+			let keys = {}
+
+			let index = 1
+
+			for [key, mapping] in items(mappings)
+				let list = add(list, index . '. F' . key . ': ' . mapping)
+				let keys[index] = key
+				let index += 1
+			endfor
+
+			let index = inputlist(list)
+
+			if index >= 1 && index <= len(list)
+				let mapping = input('Mapping for F' . keys[index] . ': ')
+
+				if mapping != ''
+					let mappings[keys[index]] = mapping
+				endif
+
+				redraw
+			endif
+		endwhile
+
+		return mappings
 	endfunction
 
 	function s:error(message)
