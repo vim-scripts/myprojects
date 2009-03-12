@@ -1,8 +1,7 @@
 "=============================================================================
 " File:        myprojects.vim
 " Author:      Frédéric Hardy (fhardy at noparking.net)
-" Last Change: Mon Mar  9 17:16:30 CET 2009
-" Version:     0.0.20
+" Last Change: Mon Mar  9 17:51:01 CET 2009
 " Licence:     GPL version 2.0 license
 "=============================================================================
 if !exists('b:current_syntax')

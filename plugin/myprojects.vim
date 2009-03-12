@@ -1,17 +1,30 @@
 "=============================================================================
 " File:        myprojects.vim
 " Author:      Frédéric Hardy (fhardy at noparking.net)
-" Last Change: Mon Mar  9 17:16:39 CET 2009
-" Version:     0.0.20
+" Last Change: Wed Mar 11 08:48:45 CET 2009
 " Licence:     GPL version 2.0 license
 " GetLatestVimScripts: 2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
-if v:version >= 700 && !exists('myprojects_enable')
-	let s:keepcpo= &cpo
+if v:version < 700
+    echoerr "myprojects.vim requires vim >= 7. DOWNLOAD IT! You'll thank me later"
+elseif !has('folding')
+    echoerr "myprojects.vim requires folding"
+elseif !exists('myprojects_enable')
+	let s:keepCpo= &cpo
 	setlocal cpo&vim
 
+	let s:version = '0.0.29'
+	let s:copyright = '2009'
+	let s:author = 'Frédéric Hardy'
+	let s:email = 'fhardy at noparking.net'
+	let s:webSite = 'http://blog.mageekbox.net'
+	let s:prompt = '[myproject] '
 	let s:buffer = -1
 	let s:filename = ''
+	let s:oldWidth = 0
+	let s:windowsOs = has('win16') || has('win32') || has('win64')
+	let s:osSlash = s:windowsOs ? '\' : '/'
+	let s:home = expand('$HOME')
 
 	command -nargs=? -complete=file MyProjectsToggle call <SID>toggle('<args>')
 
@@ -29,51 +42,28 @@ if v:version >= 700 && !exists('myprojects_enable')
 	noremap <unique> <script> <Plug>MyProjectsGoHome <SID>goHome
 	noremap <SID>goHome  :call <SID>goHome()<CR>
 
-	if !exists('g:myprojects_width')
-		let g:myprojects_width = 30
-	endif
-
-	if !exists('g:myprojects_file')
-		let g:myprojects_file = '~/.myprojects'
-	endif
-
-	if !exists('g:myprojects_tags_file')
-		let g:myprojects_tags_file = '.tags'
-	endif
-
-	if !exists('g:myprojects_auto_close')
-		let g:myprojects_auto_close = 0
-	endif
-
-	if !exists('g:myprojects_auto_resize')
-		let g:myprojects_auto_resize = 0
-	endif
-
-	if !exists('g:myprojects_syntax')
-		let g:myprojects_syntax = 1
-	endif
-
-	if !exists('g:myprojects_display_empty_folder')
-		let g:myprojects_display_empty_folder = 0
-	endif
-
-	if !exists('g:myprojects_resize_step')
-		let g:myprojects_resize_step = 10
-	endif
-
-	if !exists('g:myprojects_version_control_system')
-		let g:myprojects_version_control_system = 'svn'
-	endif
-
 	function s:myProjects(filename)
-		if s:goToWindow() < 0
-			if a:filename == ''
-				let s:filename = g:myprojects_file
-			else
-				let s:filename = a:filename
-			endif
+		call s:initVariable('g:myprojects_width', 30)
+		call s:initVariable('g:myprojects_file', s:home . s:osSlash . '.myprojects')
+		call s:initVariable('g:myprojects_tags_file', '.tags')
+		call s:initVariable('g:myprojects_auto_close', 0)
+		call s:initVariable('g:myprojects_auto_resize', 0)
+		call s:initVariable('g:myprojects_resize_step', 10)
+		call s:initVariable('g:myprojects_syntax', 1)
+		call s:initVariable('g:myprojects_display_empty_folder', 0)
+		call s:initVariable('g:myprojects_version_control_system', 'svn')
+		call s:initVariable('g:myprojects_display_number', 0)
+		call s:initVariable('g:myprojects_cursorline', 1)
+		call s:initVariable('g:myprojects_cursorcolumn', 1)
+		call s:initVariable('g:myprojects_foldcolumn', 0)
+		call s:initVariable('g:myprojects_display_path_in_statusline', 1)
+		call s:initVariable('g:myprojects_tags_generator', 'exctags')
+		call s:initVariable('g:myprojects_sessions_directory', s:home . s:osSlash . '.vim' . s:osSlash . 'myprojects_sessions')
 
-			silent execute 'leftabove vertical new ' . s:filename
+		if s:goToWindow() < 0
+			let s:filename = a:filename == '' ? g:myprojects_file : a:filename
+
+			execute 'leftabove vertical new ' . s:filename
 
 			let s:buffer = bufnr('%')
 
@@ -91,52 +81,73 @@ if v:version >= 700 && !exists('myprojects_enable')
 			nnoremap <buffer> <silent> <C-t> :call <SID>generateTags(line('.'))<CR>
 			nnoremap <buffer> <silent> <C-e> :call <SID>explore('E')<CR>
 			nnoremap <buffer> <silent> <C-S-e> :call <SID>explore('Se')<CR>
+			nnoremap <buffer> <silent> <C-a> :call <SID>appendFile(line('.'))<CR>
+			nnoremap <buffer> <silent> <C-s> :call <SID>saveSession(line('.'))<CR>
+			nnoremap <buffer> <silent> <C-A-s> :call <SID>loadSession(line('.'))<CR>
 			nnoremap <buffer> <silent> <C-A-p> :call <SID>updatePath(line('.'), 1)<CR>
 			nnoremap <buffer> <silent> <C-A-f> :call <SID>updateFilter(line('.'), 1)<CR>
 			nnoremap <buffer> <silent> <C-A-c> :call <SID>updateCd(line('.'))<CR>
 			nnoremap <buffer> <silent> <C-A-m> :call <SID>updateMappings(line('.'))<CR>
-			nnoremap <buffer> <silent> <C-i> :echo 'Path: ' . <SID>getPath(line('.'))<CR>
+			nnoremap <buffer> <silent> <C-i> :call <SID>echo('Path: ' . <SID>getPath(line('.')))<CR>
 			nnoremap <buffer> <silent> <C-Tab> :call <SID>goToPreviousWindow()<CR>
 			nnoremap <buffer> <silent> <C-Up> :call <SID>moveUp(line('.'))<CR>
+			nnoremap <buffer> <silent> <C-k> :call <SID>moveUp(line('.'))<CR>
 			nnoremap <buffer> <silent> <C-Down> :call <SID>moveDown(line('.'))<CR>
+			nnoremap <buffer> <silent> <C-j> :call <SID>moveDown(line('.'))<CR>
 			nnoremap <buffer> <silent> <C-Right> :call <SID>resize(winwidth(0) + g:myprojects_resize_step)<CR>
+			nnoremap <buffer> <silent> <C-l> :call <SID>resize(winwidth(0) + g:myprojects_resize_step)<CR>
 			nnoremap <buffer> <silent> <C-Left> :call <SID>resize(winwidth(0) - g:myprojects_resize_step)<CR>
-			nnoremap <buffer> <silent> <C-Space> :call <SID>resize('')<CR>
-			nnoremap <buffer> <silent> <A-u> :call <SID>{g:myprojects_version_control_system}('update', line('.'))<CR>
-			nnoremap <buffer> <silent> <A-r> :call <SID>{g:myprojects_version_control_system}('revert', line('.'))<CR>
-			nnoremap <buffer> <silent> <A-d> :call <SID>{g:myprojects_version_control_system}('diff', line('.'))<CR>
-			nnoremap <buffer> <silent> <A-c> :call <SID>{g:myprojects_version_control_system}('commit', line('.'))<CR>
-			nnoremap <buffer> <silent> <A-s> :call <SID>{g:myprojects_version_control_system}('status', line('.'))<CR>
+			nnoremap <buffer> <silent> <C-h> :call <SID>resize(winwidth(0) - g:myprojects_resize_step)<CR>
+			nnoremap <buffer> <silent> <C-Space> :call <SID>toggleMaximize()<CR>
+			nnoremap <buffer> <silent> <C-v> :call <SID>echoVersion()<CR>
+			nnoremap <buffer> <silent> <C-p> :call <SID>echoMyprojectsFile()<CR>
+			nnoremap <buffer> <silent> <A-u> :call <SID>{g:myprojects_version_control_system}('update', line('.'), 1)<CR>
+			nnoremap <buffer> <silent> <A-r> :call <SID>{g:myprojects_version_control_system}('revert', line('.'), 1)<CR>
+			nnoremap <buffer> <silent> <A-d> :call <SID>{g:myprojects_version_control_system}('diff', line('.'), 0)<CR>
+			nnoremap <buffer> <silent> <A-c> :call <SID>{g:myprojects_version_control_system}('commit', line('.'), 0)<CR>
+			nnoremap <buffer> <silent> <A-s> :call <SID>{g:myprojects_version_control_system}('status', line('.'), 0)<CR>
+
+			if g:myprojects_display_path_in_statusline
+				nnoremap <buffer> <silent> <Down> <Down>:call <SID>echo(<SID>getPath(line('.')))<CR>
+				nnoremap <buffer> <silent> j j:call <SID>echo(<SID>getPath(line('.')))<CR>
+				nnoremap <buffer> <silent> <Up> <Up>:call <SID>echo(<SID>getPath(line('.')))<CR>
+				nnoremap <buffer> <silent> k k:call <SID>echo(<SID>getPath(line('.')))<CR>
+			endif
 
 			setlocal autoindent
 			setlocal autoread
 			setlocal cindent
-			setlocal cursorcolumn
-			setlocal cursorline
 			setlocal expandtab
-			setlocal foldclose=""
-			setlocal foldcolumn=0
 			setlocal foldenable
+			setlocal foldlevel=0
 			setlocal foldmethod=expr
 			setlocal nobuflisted
 			setlocal noequalalways
 			setlocal noexpandtab
 			setlocal nolist
 			setlocal nomodeline
-			setlocal nonumber
 			setlocal noruler
+			setlocal nospell
 			setlocal noswapfile
 			setlocal nowrap
 			setlocal shiftwidth=3
 			setlocal splitbelow
 			setlocal splitright
-			setlocal statusline=%f%=\ [%3p%%]
 			setlocal tabstop=3
+			setlocal winfixwidth
+
+			call s:setLocal('number', g:myprojects_display_number)
+			call s:setLocal('cursorcolumn', g:myprojects_cursorcolumn)
+			call s:setLocal('cursorline', g:myprojects_cursorline)
+
+			abclear <buffer>
 
 			let sid = s:SID()
 
+			execute 'setlocal statusline=' . escape(s:prompt, ' ') . '%=[%f\ %3p%%]'
 			execute 'setlocal foldtext=' . sid . 'foldtext()'
 			execute 'setlocal foldexpr=' . sid . 'foldexpr()'
+			execute 'setlocal foldcolumn=' . g:myprojects_foldcolumn
 			execute 'au! BufEnter <buffer> call' . sid . 'bufEnter()'
 
 			if !has('syntax') || !g:myprojects_syntax
@@ -152,6 +163,79 @@ if v:version >= 700 && !exists('myprojects_enable')
 			if foldlevel(line('.'))
 				normal! zo
 			endif
+
+			redraw
+
+			if g:myprojects_display_path_in_statusline
+				call <SID>echo(<SID>getPath(line('.')))
+			endif
+		endif
+	endfunction
+
+	function s:getSessionFile(line)
+		let path = ''
+
+		let line = s:getRootLine(a:line)
+
+		if line > 0
+			let path = g:myprojects_sessions_directory . s:osSlash . fnameescape(s:getName(line))
+		endif
+
+		return path
+	endfunction
+
+	function s:wipeout()
+		try
+			silent bwipeout
+		catch E89
+			if s:input('Save [y|N] ? ', '') != 'y'
+				return 0
+			else
+				silent write
+				silent bwipeout
+			endif
+		endtry
+
+		return 1
+	endfunction
+
+	function s:saveSession(line)
+		call s:goHome()
+
+		if !isdirectory(g:myprojects_sessions_directory)
+			if !exists("*mkdir")
+				call s:error('Unable to create sessions directory ' . g:myprojects_sessions_directory . ', mkdir() function does not exists, please create it manualy')
+			else
+				 call mkdir(g:myprojects_sessions_directory, 'p', 0700)
+			endif
+		endif
+
+		if !isdirectory(g:myprojects_sessions_directory)
+			call s:error('Unable to create session, directory ' . g:myprojects_sessions_directory . ' does not exist')
+		else
+			let session = s:getSessionFile(a:line)
+
+			if session == ''
+				call s:error('Unable to create session')
+			elseif s:wipeout()
+				execute 'mksession! ' . session
+				call s:myProjects(s:filename)
+				call s:echo('Session saved.')
+			endif
+		endif
+	endfunction
+
+	function s:loadSession(line)
+		call s:goHome()
+
+		let session = s:getSessionFile(a:line)
+
+		if !filereadable(session)
+			call s:error('Unable to read session file ' . session)
+		elseif s:wipeout()
+			execute 'source ' . session
+			call s:myProjects(s:filename)
+			call s:echo('Session loaded.')
 		endif
 	endfunction
 
@@ -199,13 +283,12 @@ if v:version >= 700 && !exists('myprojects_enable')
 	endfunction
 
 	function s:close()
-		let window = s:goToWindow()
-
-		if window != -1
+		if s:goToWindow() == -1
+			return 0
+		else
 			hide
+			return 1
 		endif
-
-		return window != -1
 	endfunction
 
 	function s:float()
@@ -221,6 +304,16 @@ if v:version >= 700 && !exists('myprojects_enable')
 
 		if window != -1
 			execute 'vertical resize ' . a:width
+		endif
+	endfunction
+
+	function s:toggleMaximize()
+		if s:oldWidth == 0
+			let s:oldWidth = winwidth(0)
+			call s:resize('')
+		else
+			call s:resize(s:oldWidth)
+			let s:oldWidth = 0
 		endif
 	endfunction
 
@@ -255,13 +348,45 @@ if v:version >= 700 && !exists('myprojects_enable')
 		endif
 	endfunction
 
-	function s:getFolderLine(line)
+	function s:getFirstFolderLine(line)
 		let line = 0
 
 		let indent = indent(a:line)
 
 		if indent > 0
-			let line = search('^' . repeat('	', (indent / &tabstop) - 1) . '[^\t]', 'bnW')
+			let line = search('^' . repeat('	', (indent / &tabstop) - 1) . '[^\t]\+$', 'bnW')
+		endif
+
+		return line
+	endfunction
+
+	function s:getLastFolderLine(line)
+		let endLine = 0
+
+		let line = a:line
+
+		if !s:isFolder(line)
+			let line = s:getFirstFolderLine(line)
+		endif
+
+		if line > 0
+			let endLine = search('^\t\{0,' . (indent(line) / &tabstop) . '\}[^\t].*$', 'nW') - 1
+
+			if endLine <= 0
+				let endLine = line('$')
+			endif
+		endif
+
+		return endLine
+	endfunction
+
+	function s:getRootLine(line)
+		let line = 0
+
+		let indent = indent(a:line)
+
+		if indent != -1
+			let line = indent == 0 ? a:line : search('^[^\t]\+$', 'bnW')
 		endif
 
 		return line
@@ -281,11 +406,11 @@ if v:version >= 700 && !exists('myprojects_enable')
 
 	function s:getPath(line)
 		let path = s:extractPath(a:line)
-		let folderLine = s:getFolderLine(a:line)
+		let folderLine = s:getFirstFolderLine(a:line)
 
 		while folderLine > 0
-			let path = s:extractPath(folderLine) . '/' . path
-			let folderLine = s:getFolderLine(folderLine)
+			let path = s:extractPath(folderLine) . s:osSlash . path
+			let folderLine = s:getFirstFolderLine(folderLine)
 		endwhile
 
 		return path
@@ -296,7 +421,7 @@ if v:version >= 700 && !exists('myprojects_enable')
 	endfunction
 
 	function s:extractPathFromLine(line)
-		return !s:hasPath(a:line) ? '' : substitute(getline(a:line), '^\s*[^=]\+=\(\(\\ \|\f\)\+\).*$', '\1', '')
+		return !s:hasPath(a:line) ? '' : substitute(substitute(getline(a:line), '^\s*[^=]\+=\(\(\\ \|\f\)\+\).*$', '\1', ''), s:osSlash . '\+$', '', '')
 	endfunction
 
 	function s:extractPath(line)
@@ -318,12 +443,12 @@ if v:version >= 700 && !exists('myprojects_enable')
 	endfunction
 
 	function s:extractAttribute(name, line)
-		let attribute = ''
-
 		let line = a:line
 
-		while line > 0 && indent(line) > 0 && attribute == ''
-			let line = s:getFolderLine(line)
+		let attribute = s:extractAttributeFromLine(a:name, line)
+
+		while line > 0 && attribute == ''
+			let line = s:getFirstFolderLine(line)
 			let attribute = s:extractAttributeFromLine(a:name, line)
 		endwhile
 
@@ -346,10 +471,11 @@ if v:version >= 700 && !exists('myprojects_enable')
 
 	function s:extractCd(line)
 		let line = a:line
+
 		let cd = s:extractCdFromLine(line)
 		
-		while cd == '' && line > 0 && indent(line) > 0
-			let line = s:getFolderLine(line)
+		while cd == '' && line > 0
+			let line = s:getFirstFolderLine(line)
 			let cd = s:extractCdFromLine(line)
 		endwhile
 
@@ -401,7 +527,7 @@ if v:version >= 700 && !exists('myprojects_enable')
 
 		if path != ''
 			if getftype(path) == 'file' && delete(path) == 0
-				call s:refresh(s:getFolderLine(a:line))
+				call s:refresh(s:getFirstFolderLine(a:line))
 			else
 				call s:error('Unable to delete ' . path)
 			endif
@@ -411,7 +537,7 @@ if v:version >= 700 && !exists('myprojects_enable')
 	function s:extractMappings(line)
 		let mappings = {}
 
-		let line = s:getFolderLine(a:line)
+		let line = s:getFirstFolderLine(a:line)
 
 		if line == 0
 			let line = a:line
@@ -434,7 +560,7 @@ if v:version >= 700 && !exists('myprojects_enable')
 				let index += 1
 			endwhile
 
-			let line = s:getFolderLine(line)
+			let line = s:getFirstFolderLine(line)
 		endwhile
 
 		return mappings
@@ -451,33 +577,37 @@ if v:version >= 700 && !exists('myprojects_enable')
 
 		silent execute 'cd ' . a:path
 
-		for inode in sort(split(glob('*'), "\n"))
-			if isdirectory(inode)
-				let path = a:path . '/' . inode
+		let inodes = sort(split(glob('*') . "\n" . glob('.*'), "\n"))
 
-				if !has_key(a:folderAttributes, path)
-					let cd = ''
-					let filter = a:filter
-					let mappings = {}
+		for inode in inodes
+			if inode != '.' && inode != '..' && (a:filter == '' || match(inode, a:filter) != -1)
+				if isdirectory(inode)
+					let path = a:path . s:osSlash . inode
+
+					if !has_key(a:folderAttributes, path)
+						let cd = ''
+						let filter = a:filter
+						let mappings = {}
+					else
+						let cd = !has_key(a:folderAttributes[path], 'cd') ? '' : a:folderAttributes[path]['cd'] == path ? '.' : a:folderAttributes[path]['cd']
+						let filter = !has_key(a:folderAttributes[path], 'filter') ? a:filter : a:folderAttributes[path]['filter']
+						let mappings = !has_key(a:folderAttributes[path], 'mappings') ? {} :  a:folderAttributes[path]['mappings']
+					endif
+
+					let files = s:buildFolder(inode, a:level + 1, path, 0, cd, cd != '', filter, filter != '' && filter != a:filter, mappings, a:folderAttributes)
+
+					if files != ''
+						let folder .= "\n" . files
+					endif
 				else
-					let cd = a:folderAttributes[path]['cd'] == path ? '.' : a:folderAttributes[path]['cd']
-					let filter = a:folderAttributes[path]['filter']
-					let mappings = a:folderAttributes[path]['mappings']
+					let folder .= "\n" . repeat('	', a:level + 1) . inode
 				endif
-
-				let files = s:buildFolder(inode, a:level + 1, a:path . '/' . inode, 0, cd, cd != '', filter, filter != '' && filter != a:filter, mappings, a:folderAttributes)
-
-				if g:myprojects_display_empty_folder == 1 || files != ''
-					let folder .= "\n" . files
-				endif
-			elseif a:filter == '' || match(inode, a:filter) != -1
-				let folder .= "\n" . repeat('	', a:level + 1) . inode
 			endif
 		endfor
 
 		silent execute 'cd ' . cwd
 
-		if folder != ''
+		if folder != '' || g:myprojects_display_empty_folder == 1
 			let name = repeat('	', a:level) . a:name
 
 			if a:addPath
@@ -504,6 +634,10 @@ if v:version >= 700 && !exists('myprojects_enable')
 		return folder
 	endfunction
 
+	function s:isAbsolutePath(path)
+		return s:windowsOs ? a:path =~ '^.:\(\\\|\/\)' : a:path =~ '^/'
+	endfunction
+
 	function s:create(line)
 		let line = search('^[^\t]', 'bnW')
 
@@ -511,27 +645,34 @@ if v:version >= 700 && !exists('myprojects_enable')
 			let line = 1
 		endif
 
-		let name = input('Name: ')
+		let name = s:input('Name: ', '')
 
 		if name == ''
 			call s:error('Name must not be empty')
 		else
-			let path = fnamemodify(input('Path: ', '', 'file'), ':p')
+			let path = fnamemodify(s:input('Path: ', '', 'file'), ':p')
+			let path = substitute(path, escape(s:osSlash, '/') . '\+$', '', '')
 
-			if getftype(path) != 'dir'
+			if !s:isAbsolutePath(path)
+				call s:error('Path must be absolute')
+			elseif getftype(path) != 'dir'
 				call s:error('Path ' . path . ' is not a valid directory')
 			else
-				let cd = fnamemodify(input('Working directory: ', '', 'file'), ':p')
+				let cd = s:input('Working directory: ', '', 'file')
+
+				if cd != '.'
+					let cd = fnamemodify(cd, ':p')
+				endif
 
 				if cd != '.' && getftype(cd) != 'dir'
 					call s:error('Working directory ' . cd . ' is not a valid directory')
 				else
-					let filter = input('Filter :')
+					let filter = s:input('Filter :', '')
 					let mappings = s:defineMappings({})
 
-					echomsg 'Create project ' . name . ' from path ' . path . ', please wait...'
+					call s:echo('Create project ' . name . ' from path ' . path . ', please wait...')
 					call s:appendFolder(s:buildFolder(name, 0, path, 1, cd, cd != '', filter, filter != '', mappings, {}), line)
-					echomsg 'Project ' . name . ' created.'
+					call s:echo('Project ' . name . ' created.')
 				endif
 			endif
 		endif
@@ -541,7 +682,7 @@ if v:version >= 700 && !exists('myprojects_enable')
 		let line = a:line
 
 		if !s:isFolder(line)
-			let line = s:getFolderLine(line)
+			let line = s:getFirstFolderLine(line)
 
 			if line <= 0
 				let line = a:line
@@ -558,9 +699,9 @@ if v:version >= 700 && !exists('myprojects_enable')
 		let path = s:getPath(line)
 		let addPath = s:hasPath(line)
 		let addCd = s:hasCd(line)
-		let cd = addCd ? s:extractCd(line) : ''
+		let cd = s:extractCd(line)
 		let addFilter = s:hasFilter(line)
-		let filter = addFilter ? s:extractFilter(line) : ''
+		let filter = s:extractFilter(line)
 		let mappings = s:extractMappingsFromLine(line)
 		let folderAttributes = s:getFolderAttributes(line)
 
@@ -577,9 +718,9 @@ if v:version >= 700 && !exists('myprojects_enable')
 		silent normal! dd
 
 		if getftype(path) == 'dir'
-			echomsg 'Refresh ' . path . ' in project ' . s:getProjectName(line) . ', please wait...'
+			call s:echo('Refresh ' . path . ' in project ' . s:getProjectName(line) . ', please wait...')
 			call s:appendFolder(s:buildFolder(name, level, path, addPath, cd, addCd, filter, addFilter, mappings, folderAttributes), line)
-			echomsg path . ' was refreshed.'
+			call s:echo(path . ' was refreshed.')
 		endif
 	endfunction
 
@@ -595,69 +736,88 @@ if v:version >= 700 && !exists('myprojects_enable')
 			let mappings = s:extractMappings(line)
 			let split = a:split == '' ? 'edit' : a:split
 			let window = bufwinnr(path)
+			let type = getftype(path)
 
-			if getftype(path) == '' || window == -1
-				let directories = split(strpart(path, 1), '/')
-				call remove(directories, -1)
-
-				let dirname = ''
-
-				for directory in directories
-					let dirname .= '/' . directory
-
-					if getftype(dirname) == ''
-						call mkdir(dirname)
-					endif
-				endfor
-
-				call  s:goToPreviousWindow()
-				execute split ' ' . path
+			if type != '' && !filereadable(path)
+				call s:error('Unable to read file ' . path)
+			elseif (type != '' && type != 'file' && type != 'link')
+				call s:error('Unable to open file of type ' . type)
 			else
-				silent execute window . 'wincmd w'
-				execute 'buffer ' . bufnr(path)
-			endif
-
-			if cd != ''
-				if getftype(cd) != 'dir'
-					call s:error("Unable to change directory to " . cd)
+				if window != -1
+					silent execute window . 'wincmd w'
+					execute 'buffer ' . bufnr(path)
 				else
-					silent execute 'cd ' . cd
-					silent augroup myprojects
-					silent execute 'au BufEnter <buffer> cd ' . cd
-					silent augroup END
+					let directories = split(strpart(path, 1), s:osSlash)
+					call remove(directories, -1)
+
+					let dirname = ''
+
+					for directory in directories
+						let dirname .= s:osSlash . directory
+
+						if getftype(dirname) == ''
+							call mkdir(dirname)
+						endif
+					endfor
+
+					call  s:goToPreviousWindow()
+
+					try
+						execute split ' ' . path
+					catch E37
+						if s:input('Unsaved buffer. Save and load ' . path . ' ? [y/N]: ', '') != 'y'
+							return
+						else
+							write
+							execute split ' ' . path
+						endif
+					endtry
 				endif
-			endif
 
-			if g:myprojects_tags_file != '' && rootPath != ''
-				let tagsPath = rootPath . '/' . g:myprojects_tags_file
-
-				if getftype(tagsPath) == 'file'
-					silent execute 'setlocal tags=' . rootPath . '/' . g:myprojects_tags_file
+				if cd != ''
+					if getftype(cd) != 'dir'
+						call s:error("Unable to change directory to " . cd)
+					else
+						silent execute 'cd ' . cd
+						silent augroup myprojects
+						silent execute 'au BufEnter <buffer> cd ' . cd
+						silent augroup END
+					endif
 				endif
-			endif
 
-			setlocal more
+				if g:myprojects_tags_file != '' && rootPath != ''
+					let tagsPath = rootPath . s:osSlash . g:myprojects_tags_file
 
-			for [line, mapping] in items(mappings)
-				for [key, value] in items(mapping)
-					execute 'nmap <buffer> <silent> <F' . key . '> ' . expand(value)
+					if getftype(tagsPath) == 'file'
+						if &tags !~ '^' . tagsPath . ',\?'
+							silent execute 'set tags=' . tagsPath . ',' . &tags
+						endif
+					endif
+				endif
+
+				setlocal more
+
+				for [line, mapping] in items(mappings)
+					for [key, value] in items(mapping)
+						execute 'nmap <buffer> <silent> <F' . key . '> ' . expand(value)
+					endfor
 				endfor
-			endfor
 
-			if !hasmapto('<Plug>MyProjectsGoHome')
-				map <buffer> <silent> <C-Tab> <Plug>MyProjectsGoHome
-			endif
-
-			if g:myprojects_auto_resize || g:myprojects_auto_close
-				if g:myprojects_auto_resize
-					call s:resize(g:myprojects_width)
+				if !hasmapto('<Plug>MyProjectsGoHome')
+					map <buffer> <silent> <C-Tab> <Plug>MyProjectsGoHome
 				endif
 
-				if g:myprojects_auto_close
-					call s:close()
-				endif
+				if g:myprojects_auto_resize || g:myprojects_auto_close
+					if g:myprojects_auto_resize
+						call s:resize(g:myprojects_width)
+					endif
 
-				call s:goToPreviousWindow()
+					if g:myprojects_auto_close
+						call s:close()
+					endif
+
+					call s:goToPreviousWindow()
+				endif
 			endif
 		endif
 	endfunction
@@ -666,18 +826,20 @@ if v:version >= 700 && !exists('myprojects_enable')
 		let path = s:getPath(a:line)
 
 		if path != ''
-			let pattern = input("Grep in " . path . ": ")
+			let pattern = s:input('Grep in ' . path . ': ', '')
 
-			if s:isFolder(a:line)
-				let files = s:getFiles(path, s:extractFilter(a:line))
-			else
-				let files = path
-			endif
+			if pattern != ''
+				if s:isFolder(a:line)
+					let files = s:getFiles(path, s:extractFilter(a:line))
+				else
+					let files = path
+				endif
 
-			if files != ''
-				wincmd p
-				silent! execute 'vimgrep /' . escape(pattern, '/') . '/jg ' . files
-				silent cw
+				if files != ''
+					wincmd p
+					silent! execute 'vimgrep /' . escape(pattern, '/') . '/jg ' . files
+					silent cw
+				endif
 			endif
 		endif
 	endfunction
@@ -692,9 +854,9 @@ if v:version >= 700 && !exists('myprojects_enable')
 
 			for inode in sort(split(glob('*'), "\n"))
 				if isdirectory(inode)
-					let files .= ' ' . s:getFiles(a:path . '/' . inode, a:filter)
+					let files .= ' ' . s:getFiles(a:path . s:osSlash . inode, a:filter)
 				elseif a:filter == '' || match(inode, a:filter) != -1
-					let files .= ' ' . a:path . '/' . inode
+					let files .= ' ' . a:path . s:osSlash . inode
 				endif
 			endfor
 
@@ -708,7 +870,7 @@ if v:version >= 700 && !exists('myprojects_enable')
 		let line = line('.')
 
 		if !s:isFolder(line)
-			let line = s:getFolderLine(line)
+			let line = s:getFirstFolderLine(line)
 		endif
 
 		if line > 0
@@ -726,11 +888,26 @@ if v:version >= 700 && !exists('myprojects_enable')
 			let rootPath = s:getRootPath(line('.'))
 
 			if rootPath != ''
-				let tagsPath = rootPath . '/' . g:myprojects_tags_file
+				let tagsPath = rootPath . s:osSlash . g:myprojects_tags_file
 
-				echomsg 'Generate tags file ' . tagsPath . ' for project ' . s:getProjectName(a:line) . ', please wait...'
-				silent execute '!exctags -f ' . tagsPath . ' -R ' . rootPath
-				echomsg 'Tags file generated and stored in ' . tagsPath . '.'
+				call s:echo('Generate tags file ' . tagsPath . ' for project ' . s:getProjectName(a:line) . ', please wait...')
+				silent execute '!' . g:myprojects_tags_generator . ' -f ' . tagsPath . ' -R ' . rootPath
+				call s:echo('Tags file generated and stored in ' . tagsPath . '.')
+			endif
+		endif
+	endfunction
+
+	function s:appendFile(line)
+		let path = s:getPath(a:line)
+
+		if path != ''
+			if getftype(path) != 'file' || !filereadable(path)
+				call s:error('Unable to read file ' . path)
+			else
+				call s:goToPreviousWindow()
+				execute ':r ' . path
+				normal k
+				normal dd
 			endif
 		endif
 	endfunction
@@ -751,11 +928,11 @@ if v:version >= 700 && !exists('myprojects_enable')
 
 		let line = a:line
 
-		while line > 0 && indent(line) > 0 && empty(attribute)
+		while line > 0 && empty(attribute)
 			if s:has{a:name}(line)
 				let attribute = [line, s:extract{a:name}(line)]
 			else
-				let line = s:getFolderLine(line)
+				let line = s:getFirstFolderLine(line)
 			endif
 		endwhile
 
@@ -784,7 +961,7 @@ if v:version >= 700 && !exists('myprojects_enable')
 		if !empty(path)
 			let [pathLine, currentPath] = path
 
-			let newPath = input('Path: ', currentPath, 'file')
+			let newPath = s:input('Path: ', currentPath, 'file')
 
 			if newPath != '' && newPath != currentPath
 				call s:substitute(pathLine, '\(^\s*[^=]\+=\)\%(\\ \|\f\)\+', '\1' . fnamemodify(newPath, ':p'), '')
@@ -824,10 +1001,10 @@ if v:version >= 700 && !exists('myprojects_enable')
 			if a:value == ''
 				call s:substitute(a:line, '\s\+' . a:attribute . '="[^"]\+"', '', '')
 			else
-				call s:substitute(a:line, '\s\+' . a:attribute . '="[^"]\+"', ' ' . a:attribute . '="' . escape(a:value, '|&') . '"', '')
+				call s:substitute(a:line, '\s\+' . a:attribute . '="[^"]\+"', ' ' . a:attribute . '="' . escape(a:value, '\') . '"', '')
 			endif
 		elseif a:value != ''
-			call s:substitute(a:line, '\(^.\+$\)', '\1 ' . a:attribute . '="' . a:value . '"', '')
+			call s:substitute(a:line, '\(^.\+$\)', '\1 ' . a:attribute . '="' . escape(a:value, '\') . '"', '')
 		endif
 	endfunction
 
@@ -837,16 +1014,16 @@ if v:version >= 700 && !exists('myprojects_enable')
 		if !empty(filter)
 			let [filterLine, currentFilter] = filter
 		else
-			let filterLine = s:getFolderLine(a:line)
+			let filterLine = s:getFirstFolderLine(a:line)
 
-			if filterLine == -1
+			if filterLine == 0
 				let filterLine = a:line
 			endif
 
 			let currentFilter = ''
 		endif
 
-		let newFilter = input('Filter: ', currentFilter)
+		let newFilter = s:input('Filter: ', currentFilter)
 
 		if newFilter != currentFilter
 			call s:updateAttribute(filterLine, 'filter', newFilter)
@@ -863,16 +1040,16 @@ if v:version >= 700 && !exists('myprojects_enable')
 		if !empty(cd)
 			let [cdLine, currentCd] = cd
 		else
-			let cdLine = s:getFolderLine(a:line)
+			let cdLine = s:getFirstFolderLine(a:line)
 
-			if cdLine == -1
+			if cdLine == 0
 				let cdLine = a:line
 			endif
 
 			let currentCd = ''
 		endif
 
-		let newCd = input('Cd: ', currentCd)
+		let newCd = s:input('Cd: ', currentCd)
 
 		if newCd != currentCd
 			call s:updateAttribute(cdLine, 'cd', newCd)
@@ -882,8 +1059,8 @@ if v:version >= 700 && !exists('myprojects_enable')
 	function s:getProjectName(line)
 		let line = a:line
 
-		while line > 0 && indent(line) > 0
-			let line = s:getFolderLine(line)
+		while line > 0
+			let line = s:getFirstFolderLine(line)
 		endwhile
 
 		return s:getName(line)
@@ -898,35 +1075,17 @@ if v:version >= 700 && !exists('myprojects_enable')
 	endfunction
 
 	function s:substitute(line, search, replace, flags)
-		let line = line('.')
-
-		call s:goToLine(a:line)
-
 		let hlsearch = &hlsearch
 
 		if hlsearch
 			set nohlsearch
 		endif
 
-		execute ':s/' . a:search . '/' . escape(a:replace, '/') . '/' . a:flags
+		execute ':' . a:line . 's/' . a:search . '/' . escape(a:replace, '/') . '/' . a:flags
 
 		if hlsearch
 			set hlsearch
 		endif
-
-		call s:goToLine(line)
-	endfunction
-
-	function s:getRootLine(line)
-		let line = 0
-
-		let indent = indent(a:line)
-
-		if indent != -1
-			let line = indent == 0 ? a:line : search('^[^\t]', 'bnW')
-		endif
-
-		return line
 	endfunction
 
 	function s:getRootPath(line)
@@ -978,25 +1137,50 @@ if v:version >= 700 && !exists('myprojects_enable')
 		let line = a:line
 
 		if !s:isFolder(line)
-			let line = s:getFolderLine(line)
+			let line = s:getFirstFolderLine(line)
 		endif
 
 		if line > 0
-			let folderIndent = indent(line)
+			let endLine = s:getLastFolderLine(line)
 
-			if folderIndent != -1
-				let paths[s:getPath(line)] = {'path': s:extractPathFromLine(line), 'cd': s:extractCdFromLine(line), 'filter': s:extractFilterFromLine(line), 'mappings': s:extractMappingsFromLine(line)}
+			let position = getpos('.')
 
-				let line += 1
+			call setpos('.', [0, line, 1])
 
-				while indent(line) > folderIndent
-					if s:isFolder(line)
-						let paths[s:getPath(line)] = {'path': s:extractPathFromLine(line), 'cd': s:extractCdFromLine(line), 'filter': s:extractFilterFromLine(line), 'mappings': s:extractMappingsFromLine(line)}
+			let lineAttribute = search('\(cd\|filter\|F[1-9][0-2]\?\)\?=', '', endLine)
+
+			while lineAttribute
+				let linePath = s:extractPathFromLine(lineAttribute)
+				let lineCd = s:extractCdFromLine(lineAttribute)
+				let lineFilter = s:extractFilterFromLine(lineAttribute)
+				let lineMappings = s:extractMappingsFromLine(lineAttribute)
+
+				if linePath != '' || lineCd != '' || lineFilter != '' || !empty(lineMappings)
+					let attributes = {}
+
+					if linePath != ''
+						let attributes['path'] = linePath
 					endif
 
-					let line += 1
-				endwhile
-			endif
+					if lineCd != ''
+						let attributes['cd'] = lineCd
+					endif
+
+					if lineFilter != ''
+						let attributes['filter'] = lineFilter
+					endif
+
+					if !empty(lineMappings)
+						let attributes['mappings'] = lineMappings
+					endif
+
+					let paths[s:getPath(lineAttribute)] = attributes
+				endif
+
+				let lineAttribute = search('\(cd\|filter\|F[1-9][0-2]\?\)\?=', '', endLine)
+			endwhile
+
+			call setpos('.', position)
 		endif
 
 		return paths
@@ -1017,16 +1201,19 @@ if v:version >= 700 && !exists('myprojects_enable')
 
 			let index = 1
 
-			for [key, mapping] in items(mappings)
-				let list = add(list, index . '. F' . key . ': ' . mapping)
-				let keys[index] = key
+			while index <= 12
+				if has_key(mappings, index)
+					let list = add(list, index . '. F' . index . ': ' . mappings[index])
+					let keys[index] = index
+				endif
+
 				let index += 1
-			endfor
+			endwhile
 
 			let index = inputlist(list)
 
 			if index >= 1 && index <= len(list)
-				let mapping = input('Mapping for F' . keys[index] . ': ')
+				let mapping = s:input('Mapping for F' . keys[index] . ': ', '')
 
 				if mapping != ''
 					let mappings[keys[index]] = mapping
@@ -1039,20 +1226,61 @@ if v:version >= 700 && !exists('myprojects_enable')
 		return mappings
 	endfunction
 
-	function s:svn(command, line)
+	function s:svn(command, line, refresh)
 		let path = s:getPath(a:line)
 
 		if path != ''
 			execute '!svn ' . a:command . ' ' . path
 		endif
+
+		if a:refresh
+			call s:refresh(a:line)
+		endif
+	endfunction
+
+	function s:echoVersion()
+		call s:echo('Version ' . s:version . ' (c) ' . s:author . ' ' . s:copyright . ' - ' . s:email . ' - ' . s:webSite)
+	endfunction
+
+	function s:echoMyprojectsFile()
+		call s:echo('Currently used file ' . s:filename)
 	endfunction
 
 	function s:error(message)
-		echohl WarningMsg | echo a:message | echohl None
+		echohl errorMsg
+		call s:echo(a:message)
+		echohl normal
 	endfunction
 
-	let &cpo= s:keepcpo
-	unlet s:keepcpo
+	function s:echo(message)
+		redraw
+		echo s:prompt . a:message
+	endfunction
+
+	function s:input(prompt, ...)
+		let prompt = s:prompt . a:prompt
+
+		if a:0 == 0
+			return input(prompt)
+		elseif a:0 == 1
+			return input(prompt, a:1)
+		elseif a:0 == 2
+			return input(prompt, a:1, a:2)
+		endif
+	endfunction
+
+	function s:initVariable(name, value)
+		if !exists(a:name)
+			let {a:name} = a:value
+		endif
+	endfunction
+
+	function s:setLocal(name, bool)
+		execute 'setlocal ' . (a:bool ? a:name : 'no' . a:name)
+	endfunction
+
+	let &cpo= s:keepCpo
+	unlet s:keepCpo
 
 	let g:myprojects_enable = 1
 endif
