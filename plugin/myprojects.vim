@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Mon Apr  6 09:21:08 CEST 2009
+" Date:						Fri Apr 17 08:57:12 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.70'
+	let s:version = '0.0.80'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -34,9 +34,10 @@ elseif !exists('myprojects_enable')
 	let s:windowsOs = has('win16') || has('win32') || has('win64')
 	let s:osSlash = s:windowsOs ? '\' : '/'
 	let s:home = expand('$HOME')
-	let s:closeIfAlone = 1
+	let s:quitVimIfMyProjectsIsAlone = 1
 	let s:refreshProjectBuffers = 1
 	let s:diffBuffers = []
+	let s:preferences = {}
 
 	" Function s:initVariable() {{{3
 	function s:initVariable(name, value)
@@ -52,6 +53,7 @@ elseif !exists('myprojects_enable')
 	call s:initVariable('g:myprojects_auto_close', 0)
 	call s:initVariable('g:myprojects_auto_resize', 0)
 	call s:initVariable('g:myprojects_auto_open', 1)
+	call s:initVariable('g:myprojects_version_at_startup', 1)
 	call s:initVariable('g:myprojects_resize_step', 10)
 	call s:initVariable('g:myprojects_syntax', 1)
 	call s:initVariable('g:myprojects_display_empty_folder', 0)
@@ -62,12 +64,14 @@ elseif !exists('myprojects_enable')
 	call s:initVariable('g:myprojects_foldcolumn', 0)
 	call s:initVariable('g:myprojects_display_path_in_statusline', 1)
 	call s:initVariable('g:myprojects_tags_generator', '')
-	call s:initVariable('g:myprojects_sessions_directory', s:home . s:osSlash . '.vim' . s:osSlash . 'myprojects_sessions')
+	call s:initVariable('g:myprojects_sessions_directory', s:home . s:osSlash . '.vim' . s:osSlash . 'plugin/myprojects/sessions')
+	call s:initVariable('g:myprojects_preferences_file', s:home . s:osSlash . '.vim' . s:osSlash . 'plugin/myprojects/preferences')
 	call s:initVariable('g:myprojects_new_file_on_bottom', 1)
 	call s:initVariable('g:myprojects_sort_svn', 1)
 	call s:initVariable('g:myprojects_sort_buffers', 1)
+	call s:initVariable('g:myprojects_quit_vim_if_alone', 1)
 
-	" Initialize command and mapping {{{2
+	" Initialize command {{{2
 	command -nargs=? -complete=file MyProjectsToggle call <SID>toggleMyProjectsWindow()
 
 	if !hasmapto('<Plug>MyProjectsToggle')
@@ -103,10 +107,43 @@ elseif !exists('myprojects_enable')
 		endif
 	endfunction
 
+	" Function s:writeMyProjectsPreferences() {{{2
+	function s:writeMyProjectsPreferences()
+		let preferencesDirectory = fnamemodify(g:myprojects_preferences_file, ':h')
+		let type = getftype(preferencesDirectory)
+
+		if type == ''
+			call s:mkdir(preferencesDirectory)
+		elseif type != 'dir'
+			throw 'Path ''' . preferencesDirectory . ''' exists but it is not a directory.'
+		endif
+
+		if !filewritable(preferencesDirectory)
+			throw 'Unable to write in ''' . preferencesDirectory . '''.'
+		else
+			call writefile(['let s:preferences = ' . string(s:preferences)], g:myprojects_preferences_file)
+		endif
+	endfunction
+
+	" Function s:readMyProjectsPreferences() {{{2
+	function s:readMyProjectsPreferences()
+		if getftype(g:myprojects_preferences_file) == 'file' && filereadable(g:myprojects_preferences_file)
+			let preferencesFileContent = readfile(g:myprojects_preferences_file, '', 1)
+
+			if len(preferencesFileContent) == 1 && preferencesFileContent[0] =~ '^{.*}$'
+				execute 'let preferences =  ' . preferencesFileContent[0]
+
+				if type(preferences) == 4
+					let s:preferences = preferences
+				endif
+			endif
+		endif
+	endfunction
+
 	" Function s:openMyProjectsWindow() {{{2
 	function s:openMyProjectsWindow()
 		if !s:goToMyProjectsWindow()
-			execute 'leftabove vertical new ' . fnameescape(g:myprojects_file)
+			silent execute 'leftabove vertical new ' . fnameescape(g:myprojects_file)
 
 			let s:buffer = winbufnr(0)
 
@@ -118,7 +155,7 @@ elseif !exists('myprojects_enable')
 			nnoremap <silent> <buffer> <S-2-Leftmouse> :call <SID>open('sp')<CR>
 			nnoremap <silent> <buffer> <C-Return> :call <SID>open('vs')<CR>
 			nnoremap <silent> <buffer> <C-2-Leftmouse> :call <SID>open('vs')<CR>
-			nnoremap <silent> <buffer> <C-Tab> :call <SID>gotoAnEditionWindow()<CR>
+			nnoremap <silent> <buffer> <C-Tab> :call <SID>goToAnEditionWindow()<CR>
 			nnoremap <silent> <buffer> <C-Right> :call <SID>setWindowWidth(winwidth(0) + g:myprojects_resize_step)<CR>
 			nnoremap <silent> <buffer> <C-l> :call <SID>setWindowWidth(winwidth(0) + g:myprojects_resize_step)<CR>
 			nnoremap <silent> <buffer> <C-Left> :call <SID>setWindowWidth(winwidth(0) - g:myprojects_resize_step)<CR>
@@ -159,7 +196,9 @@ elseif !exists('myprojects_enable')
 			nnoremap <silent> <buffer> <LocalLeader>sd :call <SID>svnDiff(line('.'))<CR>
 			nnoremap <silent> <buffer> <LocalLeader>sc :call <SID>svnCommitStepOne(line('.'))<CR>
 			nnoremap <silent> <buffer> <LocalLeader>sb :call <SID>svnBlame(line('.'))<CR>
+			nnoremap <silent> <buffer> <LocalLeader>si :call <SID>svnInfo(line('.'))<CR>
 			nnoremap <silent> <buffer> <LocalLeader>sC :call <SID>svnCheckout(line('.'))<CR>
+			nnoremap <silent> <buffer> <LocalLeader>src :call <SID>svnResolve(line('.'))<CR>
 
 			if g:myprojects_display_path_in_statusline
 				nnoremap <silent> <buffer> <Down> <Down>:call <SID>echoPath()<CR>
@@ -205,6 +244,8 @@ elseif !exists('myprojects_enable')
 			silent execute 'setlocal foldexpr=' . s:sid . 'foldexpr()'
 			silent execute 'setlocal foldcolumn=' . g:myprojects_foldcolumn
 
+			silent execute 'au BufEnter * let &titlestring = ''' . &titlestring . ''''
+
 			silent execute 'augroup ' . s:plugin
 			silent au!
 
@@ -220,12 +261,9 @@ elseif !exists('myprojects_enable')
 				silent au WinEnter <buffer> set nocursorcolumn
 			endif
 
-			silent execute 'au BufEnter * let &titlestring = ''' . &titlestring . ''''
-			silent execute 'au BufEnter <buffer> call' . s:sid . 'enterInMyProjectsBuffer()'
-			silent execute 'au BufLeave <buffer> echo'
+			silent execute 'au BufEnter <buffer> let &titlestring = ''' . substitute(s:prompt, "'", "''", 'g') . ''''
+			silent execute 'au WinEnter * call ' . s:sid . 'quitVim()'
 			silent augroup END
-
-			let &titlestring = s:prompt
 
 			silent execute 'setlocal filetype=' . s:plugin
 
@@ -233,7 +271,7 @@ elseif !exists('myprojects_enable')
 				syntax on
 			endif
 
-			call s:floatWindow()
+			call s:moveWindowToTopLeftCorner()
 			call s:setWindowWidth(g:myprojects_width)
 
 			if foldlevel(line('.'))
@@ -243,6 +281,12 @@ elseif !exists('myprojects_enable')
 			if g:myprojects_display_path_in_statusline
 				call <SID>echo(<SID>getPath(line('.')))
 			endif
+
+			if g:myprojects_version_at_startup
+				call s:echoVersion()
+			endif
+
+			let &titlestring = s:prompt
 		endif
 	endfunction
 
@@ -255,9 +299,7 @@ elseif !exists('myprojects_enable')
 
 	" Function s:toggleMyProjectsWindow() {{{2
 	function s:toggleMyProjectsWindow()
-		let window = s:goToMyProjectsWindow()
-
-		if window
+		if s:goToMyProjectsWindow()
 			call s:closeMyProjectsWindow()
 		else
 			call s:openMyProjectsWindow()
@@ -276,8 +318,8 @@ elseif !exists('myprojects_enable')
 		return !s:isOneOfMyProjectsWindow(a:window) && getbufvar(a:window, '&buftype') == '' && getbufvar(a:window, '&previewwindow') == 0
 	endfunction
 	
-	" Function s:gotoAnEditionWindow() {{{2
-	function s:gotoAnEditionWindow()
+	" Function s:goToAnEditionWindow() {{{2
+	function s:goToAnEditionWindow()
 		wincmd p
 
 		let window = winnr()
@@ -291,27 +333,34 @@ elseif !exists('myprojects_enable')
 					let window += 1
 				else
 					silent execute window . 'wincmd w'
-					return
+					return window
 				endif
 			endwhile
 
-			vnew
+			let width = &columns - g:myprojects_width
+
+			silent vnew
+			call s:setWindowWidth(width)
+
+			return winnr()
 		endif
 	endfunction
 
-	" Function s:createOneMyProjectsWindow() {{{2
-	function s:createOneMyProjectsWindow(statusline, buffer)
+	" Function s:createMyProjectsWindow() {{{2
+	function s:createMyProjectsWindow(title, buffer, filetype)
 		let buffer = s:sid . a:buffer
 
 		let bufferNumber = bufnr('^' . buffer . '$')
 
 		if bufferNumber == -1
 			silent execute 'botright new ' . buffer
+			call s:setWindowHeight(0)
 		else
 			let bufferWindow = bufwinnr(bufferNumber)
 
 			if bufferWindow == -1
 				silent execute 'botright new ' . buffer
+				call s:setWindowHeight(0)
 			else
 				silent execute bufferWindow . 'wincmd w'
 			endif
@@ -331,11 +380,12 @@ elseif !exists('myprojects_enable')
 
 		call s:setLocal('cursorline', g:myprojects_cursorline)
 
-		silent execute 'setlocal filetype=' . s:plugin
-		silent execute 'setlocal statusline=' . escape(s:prompt, ' ') . escape(a:statusline, ' ')
+		let &titlestring = s:prompt . a:title
+
+		silent execute 'setlocal filetype=' . a:filetype
+		silent execute 'setlocal statusline=' . escape(&titlestring, ' ') . '%=[%3p%%]'
 
 		silent execute 'augroup ' . s:plugin
-		silent au! WinEnter <buffer>
 
 		if g:myprojects_cursorline
 			silent au WinEnter <buffer> set cursorline nocursorcolumn
@@ -343,21 +393,29 @@ elseif !exists('myprojects_enable')
 			silent au WinEnter <buffer> set nocursorline nocursorcolumn
 		endif
 
-		let &titlestring = &statusline
-
-		silent execute 'au BufEnter <buffer> let &titlestring = &statusline'
+		silent execute 'au BufEnter <buffer> let &titlestring = ''' . substitute(s:prompt . a:title, "'", "''", 'g') . ''''
 		silent augroup END
 
 		if has('syntax') && g:myprojects_syntax
 			syntax on
 		endif
 
+		abclear <buffer>
+
 		return bufferNumber == -1
 	endfunction
 
-	" Function s:createOneSvnWindow() {{{2
-	function s:createOneSvnWindow(statusline, buffer)
-		call s:createOneMyProjectsWindow(a:statusline, a:buffer)
+	" Function s:createSvnWindow() {{{2
+	function s:createSvnWindow(title)
+		call s:createMyProjectsWindow(a:title, 'svn', s:plugin . 'Svn')
+
+		setlocal modifiable
+		silent! %d
+		setlocal nomodifiable
+
+		call s:setWindowHeight(line('$'))
+
+		redraw
 
 		nnoremap <buffer> <silent> <S-LeftMouse> <LeftMouse>
 		nnoremap <buffer> <silent> <Return> :call <SID>openFromSvnWindow('edit')<CR>
@@ -369,9 +427,22 @@ elseif !exists('myprojects_enable')
 		nnoremap <buffer> <silent> <LocalLeader>sd :call <SID>svnDiffFromSvnWindow()<CR>
 	endfunction
 
-	" Function s:createOneBufferWindow() {{{2
-	function s:createOneBufferWindow(statusline, buffer, path)
-		let windowCreated = s:createOneMyProjectsWindow(a:statusline, a:buffer)
+	" Function s:createSvnConflictWindow() {{{2
+	function s:createSvnConflictWindow(title, path)
+		call s:createMyProjectsWindow(a:title, 'svn', s:plugin . 'Svn')
+
+		nnoremap <buffer> <silent> <S-LeftMouse> <LeftMouse>
+		silent execute 'noremap <buffer> <silent> <Return> :call <SID>resolveSvnConflict(''edit'', ''' . a:path . ''')<CR>'
+		silent execute 'noremap <buffer> <silent> <2-Leftmouse> :call <SID>resolveSvnConflict(''edit'', ''' . a:path . ''')<CR>'
+		silent execute 'noremap <buffer> <silent> <S-Return> :call <SID>resolveSvnConflict(''sp'', ''' . a:path . ''')<CR>'
+		silent execute 'noremap <buffer> <silent> <S-2-Leftmouse> :call <SID>resolveSvnConflict(''sp'', ''' . a:path . ''')<CR>'
+		silent execute 'noremap <buffer> <silent> <C-Return> :call <SID>resolveSvnConflict(''vs'', ''' . a:path . ''')<CR>'
+		silent execute 'noremap <buffer> <silent> <C-2-Leftmouse> :call <SID>resolveSvnConflict(''vs'', ''' . a:path . ''')<CR>'
+	endfunction
+
+	" Function s:createBufferWindow() {{{2
+	function s:createBufferWindow(title, buffer, path)
+		let windowCreated = s:createMyProjectsWindow(a:title, a:buffer, s:plugin)
 
 		nnoremap <buffer> <silent> <S-LeftMouse> <LeftMouse>
 		silent execute 'noremap <buffer> <silent> <Return> :call <SID>openFromBuffersWindow(''edit'', ''' . a:path . ''')<CR>'
@@ -385,23 +456,36 @@ elseif !exists('myprojects_enable')
 		return windowCreated
 	endfunction
 
-	" Function s:enterInMyProjectsBuffer() {{{2
-	function s:enterInMyProjectsBuffer()
-		let &titlestring = s:prompt
 
-		if s:closeIfAlone
-			let windows = winnr('$')
+	" Function s:quitVim() {{{2
+	function s:quitVim()
+		if !g:myprojects_quit_vim_if_alone
+			if s:myProjectsIsAlone()
+				call s:goToAnEditionWindow()
+			endif
 
-			while windows > 0
-				if s:isAnEditionWindow(windows)
-					return
-				else
-					let windows -= 1
-				endif
-			endwhile
-
+			return 0
+		elseif !s:quitVimIfMyProjectsIsAlone || !s:myProjectsIsAlone()
+			return 0
+		else
 			confirm qall
+			return 1
 		endif
+	endfunction
+
+	" Function s:myProjectsIsAlone() {{{2
+	function s:myProjectsIsAlone()
+		let windows = winnr('$')
+
+		while windows > 0
+			if s:isAnEditionWindow(windows)
+				return 0
+			else
+				let windows -= 1
+			endif
+		endwhile
+
+		return 1
 	endfunction
 
 	" Function s:toggleFullscreen() {{{2
@@ -417,7 +501,7 @@ elseif !exists('myprojects_enable')
 
 	" Function s:foldtext() {{{2
 	function s:foldtext()
-		let text = repeat(' ', indent(v:foldstart)) . '+ ' . substitute(getline(v:foldstart), '^\t*\([^\t].\{-}\)\%(\%(\\\)\@<!\%(=\| \).*\|$\)', '\1', 'g') . '-[' . (v:foldend - v:foldstart) . ']'
+		let text = repeat(' ', indent(v:foldstart)) . '+ ' . s:getName(v:foldstart) . '-[' . (v:foldend - v:foldstart) . ']'
 
 		if foldclosed(line('.')) == - 1
 			let virtcol = virtcol('.')
@@ -440,7 +524,7 @@ elseif !exists('myprojects_enable')
 
 	" Function s:isFolder() {{{2
 	function s:isFolder(line)
-		return indent(a:line) < indent(nextnonblank(a:line + 1))
+		return s:indent(a:line) < s:indent(nextnonblank(a:line + 1))
 	endfunction
 
 	" Function s:getFirstFolderLine() {{{2
@@ -450,13 +534,7 @@ elseif !exists('myprojects_enable')
 		let indent = s:indent(a:line)
 
 		if indent > 0
-			let position = getpos('.')
-
-			call setpos('.', [0, a:line, 1])
-
-			let line = search('^' . repeat('	', indent - 1) . '[^\t]\+$', 'bnW')
-
-			call setpos('.', position)
+			let line = search('^\t\{' . (indent - 1) . '}[^\t]\+$', 'bnW')
 		endif
 
 		return line
@@ -521,7 +599,7 @@ elseif !exists('myprojects_enable')
 
 		let indent = indent(a:line)
 
-		if indent != -1
+		if indent >= 0
 			let line = indent == 0 ? a:line : search('^[^\t]\+$', 'bnW')
 		endif
 
@@ -710,6 +788,18 @@ elseif !exists('myprojects_enable')
 		return s:extractAttribute('errorformat', a:line)
 	endfunction
 
+	" Function s:extractRefresh() {{{2
+	function s:extractRefresh(line)
+		return s:extractAttribute('refresh', a:line)
+	endfunction
+
+	" Function s:inputType() {{{2
+	function s:inputType(message)
+		let type = ''
+
+		return type
+	endfunction
+
 	" Function s:inputName() {{{2
 	function s:inputName(message)
 		let name = s:input(a:message, '')
@@ -727,8 +817,8 @@ elseif !exists('myprojects_enable')
 	endfunction
 
 	" Function s:inputPath() {{{2
-	function s:inputPath(message, emptyPath)
-		let path = s:input(a:message, '', 'file')
+	function s:inputPath(message, defaultPath, emptyPath)
+		let path = s:input(a:message, a:defaultPath, 'file')
 
 		if a:emptyPath == 0 && path == ''
 			throw 'Path must not be empty.'
@@ -744,8 +834,8 @@ elseif !exists('myprojects_enable')
 	endfunction
 
 	" Function s:inputRealPath() {{{2
-	function s:inputRealPath(message, emptyPath)
-		let path = s:inputPath(a:message, a:emptyPath)
+	function s:inputRealPath(message, defaultPath, emptyPath)
+		let path = s:inputPath(a:message, a:defaultPath, a:emptyPath)
 
 		if !s:pathExists(path)
 			throw 'Path ''' . path . ''' does not exist.'
@@ -833,7 +923,7 @@ elseif !exists('myprojects_enable')
 
 	" Function s:inputErrorFormat() {{{2
 	function s:inputErrorFormat(message, value)
-		return s:input(a:message, a:value)
+		return substitute(s:input(a:message, a:value), '\(\s\)', '\\\1', 'g')
 	endfunction
 
 	" Function s:create() {{{2
@@ -843,23 +933,32 @@ elseif !exists('myprojects_enable')
 		if indent >= 0
 			try
 				let myprojects = {}
+
+				let path = ''
+				let filter = ''
+				let make = ''
+				let errorFormat = ''
+				let mappings = {}
+
+				call s:readMyProjectsPreferences()
+
 				let name = s:inputName('Name of new project: ')
 				let myprojects[name] = {'attributes': {}, 'files': []}
-				let myprojects[name]['attributes']['path'] = s:inputRealPath('Path of project ''' . name . ''': ', 0)
-				let myprojects[name]['attributes']['cd'] = s:inputCd('Working directory of project ''' . name . ''': ', myprojects[name]['attributes']['path'], '')
-				let filter = s:inputFilter('Filter of project ''' . name . ''': ', '')
+				let myprojects[name]['attributes']['path'] = s:inputRealPath('Path of project ''' . name . ''': ', path, 0)
+				let myprojects[name]['attributes']['cd'] = s:inputCd('Working directory of project ''' . name . ''': ', myprojects[name]['attributes']['path'], myprojects[name]['attributes']['path'])
+				let filter = s:inputFilter('Filter of project ''' . name . ''': ', filter)
 
 				if filter != ''
 					let myprojects[name]['attributes']['filter'] = filter
 				endif
 
-				let myprojects[name]['attributes']['make'] = s:inputMake('Make of project ''' . name . ''': ', '')
-				let myprojects[name]['attributes']['errorformat'] = s:inputErrorFormat('Error format of project ''' . name . ''': ', '')
-				let myprojects[name]['attributes']['mappings'] = s:inputMappings('Mappings of project ''' . name . ''': ', {})
+				let myprojects[name]['attributes']['make'] = s:inputMake('Make of project ''' . name . ''': ', make)
+				let myprojects[name]['attributes']['errorformat'] = s:inputErrorFormat('Error format of project ''' . name . ''': ', errorFormat)
+				let myprojects[name]['attributes']['mappings'] = s:inputMappings('Mappings of project ''' . name . ''': ', mappings)
 
 				call s:echo('Create project ''' . name . ''' from path ''' . myprojects[name]['attributes']['path'] . '''...')
-				call s:put(s:buildMyProjects('', filter, myprojects, indent), a:line)
-				call s:echo('Project ''' . name . ''' created.')
+				call s:put(s:buildMyProjects('', filter, myprojects, '', indent), a:line)
+				call s:message('Project ''' . name . ''' created.')
 
 				call s:echo(s:getPath(a:line))
 			catch /.*/
@@ -882,9 +981,9 @@ elseif !exists('myprojects_enable')
 			let indent = s:indent(line)
 
 			if indent >= 0
-				call s:echo('Performing refresh of ''' . path . ''' in project ''' . s:getProjectName(line) . '''...')
+				call s:echo('Do refresh of ''' . path . ''' in project ''' . s:getProjectName(line) . '''...')
 
-				let myprojects = s:buildMyProjects(substitute(path, '[^' . s:osSlash . ']\+$', '', ''), s:extractFilter(line), s:getMyProjects(line), indent)
+				let myprojects = s:buildMyProjects(substitute(path, '[^' . s:osSlash . ']\+$', '', ''), s:extractFilter(line), s:getMyProjects(line), s:extractRefresh(line), indent)
 
 				let range = line
 				let foldlevel = 0
@@ -894,16 +993,20 @@ elseif !exists('myprojects_enable')
 					let foldlevel = foldlevel(line)
 				endif
 
-				silent execute ':' . range . 'd'
+				silent! execute ':' . range . 'd'
 
-				call s:put(myprojects, line)
+				if myprojects != ''
+					call s:put(myprojects, line)
 
-				silent! execute ':' . range . 'foldclose!'
+					silent! execute ':' . range . 'foldclose!'
 
-				while foldlevel > 0
-					silent normal! zo
-					let foldlevel -= 1
-				endwhile
+					while foldlevel > 0
+						silent normal! zo
+						let foldlevel -= 1
+					endwhile
+
+					call s:updateRefresh(line)
+				endif
 
 				call s:echo('Refresh done for ''' . path . '''.')
 			endif
@@ -954,7 +1057,7 @@ elseif !exists('myprojects_enable')
 
 				if files != ''
 					try
-						call s:echo('Performing grep on ''' . path . ''' with pattern ''' . pattern . '''...')
+						call s:echo('Do grep on ''' . path . ''' with pattern ''' . pattern . '''...')
 						silent execute 'vimgrep /' . escape(pattern, '/') . '/jg ' . files
 						silent cw
 						call s:echo('Grep done on ''' . path . ''' with pattern ''' . pattern . '''.')
@@ -980,7 +1083,7 @@ elseif !exists('myprojects_enable')
 			let path = s:getPath(line)
 
 			if path != ''
-				call s:gotoAnEditionWindow()
+				call s:goToAnEditionWindow()
 				silent execute a:mode . 'xplore ' . path
 			endif
 		endif
@@ -1011,9 +1114,13 @@ elseif !exists('myprojects_enable')
 				if rootPath != ''
 					let tagsPath = rootPath . s:osSlash . g:myprojects_tags_file
 
-					call s:echo('Performing tags file generation in ''' . tagsPath . ''' for project ''' . s:getProjectName(a:line) . '''...')
-					silent execute '!' . g:myprojects_tags_generator . ' -f ' . tagsPath . ' -R ' . rootPath
-					call s:message('Tags file generation done for project ''' . s:getProjectName(a:line) . ''' and stored in ''' . tagsPath . '''.')
+					try
+						call s:echo('Do tags file generation in ''' . tagsPath . ''' for project ''' . s:getProjectName(a:line) . '''...')
+						call s:system(g:myprojects_tags_generator, '-f ' . tagsPath . ' -R ' . rootPath)
+						call s:message('Tags file generation done for project ''' . s:getProjectName(a:line) . ''' and stored in ''' . tagsPath . '''.')
+					catch /.*/
+						call s:message('Unable to generate tags file for project ''' . s:getProjectName(a:line) . ''' : ' . v:exception)
+					endtry
 				endif
 			endif
 		endif
@@ -1038,12 +1145,12 @@ elseif !exists('myprojects_enable')
 			if headType == ''
 				call s:mkdir(head)
 			elseif headType != 'dir'
-				throw 'Path ' . head . ' exists but it is not a directory'
+				throw 'Path ''' . head . ''' exists but it is not a directory.'
 			endif
 		elseif type != 'file'
-			throw 'Unable to open file ' . path . ' of type ' . type . '.'
+			throw 'Unable to open file ''' . path . ''' of type ''' . type . '''.'
 		elseif !filereadable(path)
-			throw 'Unable to read file ' . path . '.'
+			throw 'Unable to read file ''' . path . '''.'
 		endif
 
 		if g:myprojects_auto_resize
@@ -1060,7 +1167,7 @@ elseif !exists('myprojects_enable')
 			silent execute window . 'wincmd w'
 			silent execute 'buffer ' . bufnr(path)
 		else
-			call  s:gotoAnEditionWindow()
+			call  s:goToAnEditionWindow()
 
 			let command =  a:command . ' ' . fnameescape(path)
 
@@ -1092,14 +1199,24 @@ elseif !exists('myprojects_enable')
 			if getftype(cd) != 'dir'
 				throw 'Unable to change directory to ' . cd . '.'
 			else
-				let cd = fnameescape(cd)
+				let cd = resolve(cd)
 
-				silent execute 'lcd ' . cd
+				if getftype(cd) != 'dir'
+					call s:warningMessage('Path ''' . cd . ''' is not a valid working directory.')
+				else
+					let cd = fnameescape(cd)
 
-				if !exists('#' . s:plugin . '#BufEnter#<buffer>')
-					silent execute 'augroup ' . s:plugin
-					silent execute 'au BufEnter <buffer> lcd ' . cd
-					silent augroup END
+					try
+						silent execute 'lcd ' . cd
+
+						if !exists('#' . s:plugin . '#BufEnter#<buffer>')
+							silent execute 'augroup ' . s:plugin
+							silent execute 'au! BufEnter <buffer> lcd ' . cd
+							silent augroup END
+						endif
+					catch /E472/
+						call s:warningMessage('Unable to go to working directory ''' . cd . '''.')
+					endtry
 				endif
 			endif
 		endif
@@ -1135,7 +1252,7 @@ elseif !exists('myprojects_enable')
 			if getftype(path) != 'file' || !filereadable(path)
 				call s:error('Unable to read file ' . path . '.')
 			else
-				call s:gotoAnEditionWindow()
+				call s:goToAnEditionWindow()
 				silent execute ':r ' . path
 				silent normal! k
 				silent normal! dd
@@ -1264,7 +1381,7 @@ elseif !exists('myprojects_enable')
 
 			if currentPath != ''
 				try
-					let newPath = s:cleanPath(s:inputRealPath('Set path for ''' . s:getName(a:line) . ''': ', 1))
+					let newPath = s:cleanPath(s:inputRealPath('Set path for ''' . s:getName(a:line) . ''': ', '', 1))
 
 					if newPath != '' && newPath != currentPath
 						call s:substitute(a:line, '\(^\t*[^\t]\%(\\ \|\f\)\+\)', '\1=' . newPath, '')
@@ -1401,14 +1518,19 @@ elseif !exists('myprojects_enable')
 			let [pathLine, currentPath] = path
 
 			try
-				let newPath = s:cleanPath(s:inputRealPath('Update path for ''' . s:getName(pathLine) . ''': ', 1))
+				let newPath = s:cleanPath(s:inputRealPath('Update path for ''' . s:getName(pathLine) . ''': ', '', 1))
 
-				if newPath != '' && newPath != currentPath
-					call s:substitute(pathLine, '^.*$', s:getName(pathLine) . '=' . newPath . ' ' . substitute(substitute(getline(pathLine), '^\t*[^\t].\{-}\(\%(\\\)\@<!\%( \|=\)\)', '\1', ''), '^=.\{-}\%(\\\)\@<! \(.*$\)', '\1', ''), '')
+				if newPath != ''
+					if newPath == currentPath
+						call s:echo('Path not updated for ''' . path . '''.')
+					else
+						call s:substitute(pathLine, '^.*$', s:getName(pathLine) . '=' . newPath . ' ' . substitute(substitute(getline(pathLine), '^\t*[^\t].\{-}\(\%(\\\)\@<!\%( \|=\)\)', '\1', ''), '^=.\{-}\%(\\\)\@<! \(.*$\)', '\1', ''), '')
 
-					if a:refresh
-						call s:refresh(pathLine, 0)
-					endif
+						if a:refresh
+							call s:refresh(pathLine, 0)
+						endif
+
+						call s:message('Update done for path with ''' . newPath . '''.')
 				endif
 			catch /.*/
 				call s:error(v:exception)
@@ -1425,11 +1547,13 @@ elseif !exists('myprojects_enable')
 
 			try
 				let path = s:getPath(cdLine)
-
 				let newCd = s:inputCd('Update working directory for ''' . path . ''': ', path, currentCd)
 
-				if newCd != currentCd
+				if newCd == currentCd
+					call s:echo('Working directory not updated for ''' . path . '''.')
+				else
 					call s:updateAttribute(cdLine, 'cd', s:escape(newCd))
+					call s:message('Update done for working directory with ''' . newCd . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
 				call s:error(v:exception)
@@ -1444,15 +1568,24 @@ elseif !exists('myprojects_enable')
 		if !empty(filter)
 			let [filterLine, currentFilter] = filter
 
-			let newFilter = s:inputFilter('Update filter for ''' . s:getPath(filterLine) . ''': ', currentFilter)
+			try
+				let path = s:getPath(filterLine)
+				let newFilter = s:inputFilter('Update filter for ''' . path . ''': ', currentFilter)
 
-			if newFilter != currentFilter
-				call s:updateAttribute(filterLine, 'filter', newFilter)
+				if newFilter == currentFilter
+					call s:echo('Filter not updated for ''' . path . '''.')
+				else
+					call s:updateAttribute(filterLine, 'filter', newFilter)
 
-				if a:refresh
-					call s:refresh(filterLine, 0)
+					if a:refresh
+						call s:refresh(filterLine, 0)
+					endif
+
+					call s:message('Update done for filter with ''' . newFilter . ''' on ''' . path . '''.')
 				endif
-			endif
+			catch /.*/
+				call s:error(v:exception)
+			endtry
 		endif
 	endfunction
 
@@ -1461,8 +1594,8 @@ elseif !exists('myprojects_enable')
 		let currentMappings = s:getNestedMappings(a:line)
 
 		if !empty(currentMappings)
-			let lines = {}
-			let mappings = {}
+			let lines = {1: '', 2: '', 3: '', 4: '', 5: '', 6: '', 7: '', 8: '', 9: '', 10: '', 11: '', 12: ''}
+			let mappings = {1: '', 2: '', 3: '', 4: '', 5: '', 6: '', 7: '', 8: '', 9: '', 10: '', 11: '', 12: ''}
 
 			for [key, value] in items(currentMappings)
 				let lines[key] = value[0]
@@ -1486,11 +1619,13 @@ elseif !exists('myprojects_enable')
 
 			try
 				let path = s:getPath(makeLine)
-
 				let newMake = s:inputMake('Update make for ''' . path . ''': ', currentMake)
 
-				if newMake != currentMake
+				if newMake == currentMake
+					call s:echo('Make not updated for ''' . path . '''.')
+				else
 					call s:updateAttribute(makeLine, 'make', newMake)
+					call s:message('Update done for make with ''' . newMake . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
 				call s:error(v:exception)
@@ -1507,11 +1642,13 @@ elseif !exists('myprojects_enable')
 
 			try
 				let path = s:getPath(errorFormatLine)
-
 				let newErrorFormat = s:inputErrorFormat('Update error format for ''' . path . ''': ', currentErrorFormat)
 
-				if newErrorFormat != currentErrorFormat
+				if newErrorFormat == currentErrorFormat
+					call s:echo('Errorformat not updated for ''' . path . '''.')
+				else
 					call s:updateAttribute(errorFormatLine, 'errorformat', newErrorFormat)
+					call s:message('Update done for errorformat with ''' . newErrorFormat . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
 				call s:error(v:exception)
@@ -1519,14 +1656,20 @@ elseif !exists('myprojects_enable')
 		endif
 	endfunction
 
-	" Function s:svn() {{{2
-	function s:svn(command)
+
+	" Function s:updateRefresh() {{{2
+	function s:updateRefresh(line)
+		call s:updateAttribute(a:line, 'refresh', localtime())
+	endfunction
+
+	" Function s:system() {{{2
+	function s:system(bin, arguments)
 		if !exists('*system')
 			throw 'Vim system() built-in function is not available.'
-		elseif !executable('svn')
-			throw 'Svn executable is not available.'
+		elseif !executable(a:bin)
+			throw '''' . a:bin . ''' executable is not available.'
 		else
-			let output = system('svn ' . a:command)
+			let output = system(a:bin . ' ' . a:arguments)
 
 			if v:shell_error
 				throw output
@@ -1536,26 +1679,29 @@ elseif !exists('myprojects_enable')
 		endif
 	endfunction
 
+	" Function s:svn() {{{2
+	function s:svn(arguments)
+		return s:system('svn', a:arguments)
+	endfunction
+
+	" Function s:svnError() {{{2
+	function s:svnError(error, exception)
+		call s:errorMessage(a:error)
+
+		for error in split(a:exception, "\n")
+			call s:errorMessage("   " . error)
+		endfor
+	endfunction
+
 	" Function s:getSvnStatus() {{{2
 	function s:getSvnStatus(path)
-		try
-			let files = []
+		let files = filter(split(s:svn('status ' . shellescape(a:path)), "\n"), "v:val =~# '^[[:space:]ACDIMRX?!~L+SKOTB]\\{6}\\s'")
 
-			call s:echo('Performing svn status on ''' . a:path . '''...')
-			let output = s:svn('status ' . shellescape(a:path))
-			call s:message('Svn status done on path ''' . a:path . '''.')
+		if g:myprojects_sort_svn
+			let files = sort(files)
+		endif
 
-			let files = filter(split(output, "\n"), "v:val =~# '^[[:space:]ACDIMRX?!~L+SKOTB]\\{6}\\s'")
-
-			if g:myprojects_sort_svn
-				let files = sort(files)
-			endif
-
-			return files
-		catch /.*/
-			call s:errorMessage('Svn status failed on path ''' . a:path . '''.')
-			throw v:exception
-		endtry
+		return files
 	endfunction
 
 	" Function s:svnStatus() {{{2
@@ -1564,17 +1710,13 @@ elseif !exists('myprojects_enable')
 
 		if path != ''
 			try
-				let lines = s:buildSvnMessage('', s:getSvnStatus(path), '')
+				call s:createSvnWindow('Svn status of ''' . path . '''')
+				call s:echo('Do svn status on ''' . path . '''...')
+				call s:putInMyProjectsWindow(s:getSvnStatus(path))
+				call s:message('Svn status done on path ''' . path . '''.')
 			catch /.*/
-				let lines = s:buildSvnMessage('Unable to status path ' . path . ':', [], v:exception)
+				call s:svnError('Svn status failed on ''' . path . ''' :', v:exception)
 			endtry
-
-			call s:createOneSvnWindow('Svn status of ' . path . '%=[%3p%%]', 'svn')
-
-			setlocal buftype=nofile
-
-			call s:putList(lines, 1, 0)
-			setlocal nomodifiable
 		endif
 	endfunction
 
@@ -1584,70 +1726,46 @@ elseif !exists('myprojects_enable')
 
 		if path != ''
 			try
-				call s:echo('Performing svn update on ''' . path . '''...')
-				let output = s:svn('update --accept postpone ' . shellescape(path))
-				call s:message('Svn update done on ''' . path . '''.')
+				call s:createSvnWindow('Svn update of ''' . path . '''')
+				call s:echo('Do svn update on ''' . path . '''...')
 
-				let files = filter(split(output, "\n"), "v:val =~# '^[ADUCGE[:space:]]\\{4}\\s'")
+				let files = filter(split(s:svn('update --accept postpone ' . shellescape(path)), "\n"), "v:val =~# '^[ADUCGE[:space:]]\\{4}\\s'")
 
-				if empty(files)
-					let lines = s:buildSvnMessage('There is no file to update in ' . path . '.', [], '')
-				else
+				if !empty(files)
 					if g:myprojects_sort_svn
 						let files = sort(files)
 					endif
 
-					let lines = s:buildSvnMessage('', files, '')
-
 					call s:refresh(a:line, 0)
 				endif
+
+				call s:putInMyProjectsWindow(files)
+				call s:message('Svn update done on ''' . path . '''.')
 			catch /.*/
-				call s:errorMessage('Svn update failed on ''' . path . '''.')
-				let lines = s:buildSvnMessage('Unable to update path ' . path . ':', [], v:exception)
+				call s:svnError('Svn update failed on ''' . path . ''' :', v:exception)
 			endtry
-
-			call s:createOneSvnWindow('Svn update of ' . path . '%=[%3p%%]', 'svn')
-
-			setlocal buftype=nofile
-
-			call s:putList(lines, 1, 0)
-
-			setlocal nomodifiable
 		endif
 	endfunction
 
 	" Function s:svnCommitStepOne() {{{2
 	function s:svnCommitStepOne(line)
-		let b:files = ''
-		let b:message = ''
-
 		let path = s:getPath(a:line)
 
 		if path != ''
 			try
-				let files = filter(s:getSvnStatus(path), 'strpart(v:val, 0, 6) =~# "[MDAR]"')
+				call s:createSvnWindow('Files to commit in ''' . path . '''')
 
-				if empty(files)
-					let lines = s:buildSvnMessage('There is no file to commit on ' . path '.', [], '')
-				else
-					let lines = s:buildSvnMessage('Delete file if you don''t want to commit it and type :w...', files, '')
-				endif
-			catch /.*/
-				let lines = s:buildSvnMessage('Unable to commit path ' . path . ':', [], v:exception)
-			endtry
+				call s:echo('Retrieve files to commit in ''' . path . '''...')
+				call s:putInMyProjectsWindow(filter(s:getSvnStatus(path), 'strpart(v:val, 0, 6) =~# "[MDAR]"'))
+				call s:echo('Files to commit retrieved in ''' . path . '''.')
 
-			call s:createOneSvnWindow('Svn commit of ' . path . '%=[%3p%%]', 'svn')
-				
-			if !v:exception
-				setlocal nomodified
 				setlocal buftype=acwrite
 				setlocal modifiable
 
-				execute 'au! ' . s:plugin . ' BufWriteCmd <buffer>'
-				execute 'au ' . s:plugin . ' BufWriteCmd <buffer> call ' . s:sid . 'svnCommitStepTwo()'
-			endif
-
-			call s:putList(lines, empty(files) ? '' : 2, 0)
+				execute 'au! ' . s:plugin . ' BufWriteCmd <buffer> call ' . s:sid . 'svnCommitStepTwo()'
+			catch /.*/
+				call s:svnError('Unable to retrieve files to revert in ''' . path . ''' :', v:exception)
+			endtry
 		endif
 	endfunction
 
@@ -1655,196 +1773,130 @@ elseif !exists('myprojects_enable')
 	function s:svnCommitStepTwo()
 		setlocal nomodified
 
-		let b:files = getbufline('%', 1, '$')
+		let files = getbufline('%', 1, '$')
 
-		call filter(b:files, 'strpart(v:val, 0, 6) =~# "[MDAR]"')
+		call filter(files, 'strpart(v:val, 0, 6) =~# "[MDAR]"')
 
-		if empty(b:files)
-			setlocal buftype=nofile
-			let lines = s:buildSvnMessage('No files to commit.', [], '')
+		if empty(files)
+			bwipeout
 		else
-			let files = copy(b:files)
+			let b:files = copy(files)
 
 			call insert(files, '')
+			call s:createSvnWindow('Define log message and type :w to commit...')
+			call s:putInMyProjectsWindow(files)
 
-			let lines = s:buildSvnMessage('Define log message and type :w...', files, '')
+			setlocal modifiable
+			setlocal buftype=acwrite
 
-			execute 'au! ' . s:plugin . ' BufWriteCmd <buffer>'
 			execute 'au! ' . s:plugin . ' BufWriteCmd <buffer> call ' . s:sid . 'svnCommitStepThree()'
 		endif
-
-		call s:putList(lines, empty(b:files) ? '' : 2, 0)
 	endfunction
 
 	" Function s:svnCommitStepThree() {{{2
 	function s:svnCommitStepThree()
 		setlocal nomodified
-		setlocal buftype=nofile
 
-		execute 'au! ' . s:plugin . ' BufWriteCmd <buffer>'
+		let files = b:files
+		let message = filter(getbufline('%', 1, '$'), "v:val !~# '^" . escape(s:prompt, '[]') . "'")
 
-		let b:message = filter(getbufline('%', 1, '$'), "v:val !~# '^" . escape(s:prompt, '[]') . "'")
+		bwipeout
 
-		call map(b:files, "substitute(v:val, '^[^\\s]\\+\\s', '', '')")
+		call map(files, "substitute(v:val, '^[^\\s]\\+\\s', '', '')")
 
 		try
-			call s:echo('Performing svn commit of ' . join(b:files, ', ') . '...')
-			let output = s:svn('commit ' . join(map(copy(b:files), 'shellescape(v:val)'), ' ') . ' -m ' . shellescape(join(b:message, "\n")))
-			call s:message('Svn commit done for files ' . join(b:files, ', ') . '.')
-
-			let lines = s:buildSvnMessage('These files as been committed:', b:files, '')
+			call s:echo('Do svn commit of ' . join(files, ', ') . '...')
+			call s:svn('commit ' . join(map(copy(files), 'shellescape(v:val)'), ' ') . ' -m ' . shellescape(join(message, "\n")))
+			call s:message('Svn commit done for files ' . join(files, ', ') . '.')
 		catch /.*/
-			call s:errorMessage('Unable to commit files ' . join(b:files, ', ') . '.')
-			let lines = s:buildSvnMessage('Unable to commit these files:', b:files, output)
+			call s:svnError('Svn commit failed on files ''' . join(files, ''', ''') . ''':', v:exception)
 		endtry
-
-		call s:putList(lines, '', 0)
-
-		setlocal nomodifiable
 	endfunction
 
 	" Function s:svnRevertStepOne() {{{2
 	function s:svnRevertStepOne(line)
-		let b:files = ''
-		let b:message = ''
-
 		let path = s:getPath(a:line)
 
 		if path != ''
 			try
-				let files = filter(s:getSvnStatus(path), 'strpart(v:val, 0, 6) =~# ''\%(M\|D\|R\|C\)''')
+				call s:createSvnWindow('Files to revert in ''' . path . ''', type :w to revert them...')
+				call s:echo('Retrieve files to revert in ''' . path . '''...')
+				call s:putInMyProjectsWindow(filter(s:getSvnStatus(path), 'strpart(v:val, 0, 6) =~# ''\%(M\|D\|R\|C\)'''))
+				call s:echo('Files to revert retrieved in ''' . path . '''.')
 
-				let goToLine = ''
-
-				if empty(files)
-					let lines = s:buildSvnMessage('There is no file to revert on ' . path . '.', [], '')
-				else
-					let goToLine = 2
-
-					if g:myprojects_sort_svn
-						let files = sort(files)
-					endif
-
-					let lines = s:buildSvnMessage('Delete file if you don''t want to revert it and type :w...', files, '')
-				endif
-			catch /.*/
-				let lines = s:buildSvnMessage('Unable to revert path ' . path . ':', [], v:exception)
-			endtry
-
-			call s:createOneSvnWindow('Svn revert of ' . path . '%=[%3p%%]', 'svn')
-
-			if !v:exception
-				setlocal nomodified
 				setlocal buftype=acwrite
 				setlocal modifiable
 
-				execute 'au! ' . s:plugin . ' BufWriteCmd <buffer>'
-				execute 'au ' . s:plugin . ' BufWriteCmd <buffer> call ' . s:sid . 'svnRevertStepTwo()'
-			endif
-
-			call s:putList(lines, goToLine, 0)
+				execute 'au! ' . s:plugin . ' BufWriteCmd <buffer> call ' . s:sid . 'svnRevertStepTwo()'
+			catch /.*/
+				call s:svnError('Unable to retrieve files to revert in ''' . path . ''':', v:exception)
+			endtry
 		endif
 	endfunction
 
 	" Function s:svnRevertStepTwo() {{{2
 	function s:svnRevertStepTwo()
 		setlocal nomodified
-		setlocal buftype=nofile
 
-		execute 'au! ' . s:plugin . ' BufWriteCmd <buffer>'
+		let files = filter(getbufline('%', 1, '$'), 'strpart(v:val, 0, 6) =~# ''\%(M\|D\|R\|C\)''')
 
-		let b:files = getbufline('%', 1, '$')
+		bwipeout
 
-		call filter(b:files, 'strpart(v:val, 0, 6) =~# ''\%(M\|D\|R\|C\)''')
-
-		if empty(b:files)
-			let lines = s:buildSvnMessage('No files to revert.', [], '')
-		else
-			call map(b:files, "substitute(v:val, '^[^\\s]\\+\\s', '', '')")
+		if !empty(files)
+			call map(files, "substitute(v:val, '^[^\\s]\\+\\s', '', '')")
 
 			try
-				call s:echo('Performing svn revert on files ' . join(b:files, ', ') . '...')
-				let output = s:svn('revert ' . join(map(copy(b:files), 'shellescape(v:val)'), ' '))
-				call s:message('Svn revert done for files ' . join(b:files, ', ') . '.')
-
-				let lines = s:buildSvnMessage('These files have been reverted:', b:files, '')
+				call s:echo('Do svn revert on files ' . join(files, ', ') . '...')
+				call s:svn('revert ' . join(map(copy(files), 'shellescape(v:val)'), ' '))
+				call s:message('Svn revert done for files ' . join(files, ', ') . '.')
 			catch /.*/
-				call s:errorMessage('Unable to revert files ' . join(b:filees, ', ') . '.')
-				let lines = s:buildSvnMessage('Unable to revert files:', b:files, output)
+				call s:svnError('Svn revert failed on ''' . path . ''':', v:exception)
 			endtry
-
-			call s:putList(lines, '', 0)
-
-			setlocal nomodifiable
 		endif
 	endfunction
 
 	" Function s:svnAddStepOne() {{{2
 	function s:svnAddStepOne(line)
-		let b:files = ''
-		let b:message = ''
-
 		let path = s:getPath(a:line)
 
 		if path != ''
 			try
-				let files = filter(s:getSvnStatus(path), 'v:val =~ "^?"')
+				call s:createSvnWindow('Files to add in ''' . path . ''', type :w to add them...')
+				call s:echo('Retrieve files to add in ''' . path . '''...')
+				call s:putInMyProjectsWindow(filter(s:getSvnStatus(path), 'v:val =~ "^?"'))
+				call s:echo('Files to add retrieved in ''' . path . '''.')
 
-				if empty(files)
-					let lines = s:buildSvnMessage('There is no file to add on path ' . path . '.', [], '')
-				else
-					let lines = s:buildSvnMessage('Delete file if you don''t want to add it and type :w...', files, '')
-				endif
-			catch /.*/
-				let lines = s:buildSvnMessage('Unable to add from path ' . path . ':', [], v:exception)
-			endtry
-
-			call s:createOneSvnWindow('Svn add of ' . path . '%=[%3p%%]', 'svn')
-
-			if !v:exception
-				setlocal nomodified
 				setlocal buftype=acwrite
 				setlocal modifiable
 
-				execute 'au! ' . s:plugin . ' BufWriteCmd <buffer>'
-				execute 'au ' . s:plugin . ' BufWriteCmd <buffer> call ' . s:sid . 'svnAddStepTwo()'
-			endif
-
-			call s:putList(lines, empty(files) ? '' : 2, 0)
+				execute 'au! ' . s:plugin . ' BufWriteCmd <buffer> call ' . s:sid . 'svnAddStepTwo()'
+			catch /.*/
+				call s:svnError('Unable to retrieve files to add in ''' . path . ''':', v:exception)
+			endtry
 		endif
 	endfunction
 
 	" Function s:svnAddStepTwo() {{{2
 	function s:svnAddStepTwo()
 		setlocal nomodified
-		setlocal buftype=nofile
 
-		execute 'au! ' . s:plugin . ' BufWriteCmd <buffer>'
+		let files = getbufline('%', 1, '$')
 
-		let b:files = getbufline('%', 1, '$')
+		bwipeout
 
-		call filter(b:files, "v:val =~ '^?'")
+		call filter(files, "v:val =~ '^?'")
 
-		if empty(b:files)
-			let lines = s:buildSvnMessage('No files to add.', [], '')
-		else
-			call map(b:files, "substitute(v:val, '^[^\\s]\\+\\s', '', '')")
+		if !empty(files)
+			call map(files, "substitute(v:val, '^[^\\s]\\+\\s', '', '')")
 
 			try
-				call s:echo('Performing svn add for files ' . join(b:files, ', ') . '...')
-				let output = s:svn('add ' . join(map(copy(b:files), 'shellescape(v:val)'), ' '))
-				call s:message('Svn add done for files ' . join(b:files, ', ') . '.')
-
-				let lines = s:buildSvnMessage('These files has been added:', b:files, '')
+				call s:echo('Do svn add for files ' . join(files, ', ') . '...')
+				call s:svn('add ' . join(map(copy(files), 'shellescape(v:val)'), ' '))
+				call s:message('Svn add done for files ' . join(files, ', ') . '.')
 			catch /.*/
-				call s:errorMessage('Unable to add files ' . join(b:files ', ') . '.')
-				let lines = s:buildSvnMessage('Unable to add these files:', b:files, output)
+				call s:svnError('Svn add failed on ''' . path . ''':', v:exception)
 			endtry
 		endif
-
-		call s:putList(lines, '', 0)
-
-		setlocal nomodifiable
 	endfunction
 
 	" Function s:svnDiff() {{{2
@@ -1858,7 +1910,7 @@ elseif !exists('myprojects_enable')
 				call s:error('Unable to diff ''' . path . ''' because it is not a file.')
 			else
 				try
-					call s:echo('Performing svn diff on ''' . path . '''...')
+					call s:echo('Do svn diff on ''' . path . '''...')
 					let previousVersion = s:svn('cat ' . shellescape(path) . ' -r HEAD')
 					call s:message('Svn diff done on ''' . path . '''.')
 
@@ -1899,8 +1951,8 @@ elseif !exists('myprojects_enable')
 					setlocal buftype=nofile
 					setlocal nobuflisted
 					setlocal noswapfile
-					silent 0put=previousVersion
-					silent $d
+					silent! 0put=previousVersion
+					silent! normal! $d
 					silent normal! 1gg
 					setlocal nomodifiable
 
@@ -1914,7 +1966,7 @@ elseif !exists('myprojects_enable')
 					let &titlestring = file
 
 					silent execute 'augroup ' . s:plugin
-					silent execute 'au BufEnter <buffer> let &titlestring ="' . file . '"'
+					silent execute 'au! BufEnter <buffer> let &titlestring ="' . file . '"'
 					silent augroup END
 
 					silent normal! ]c
@@ -1936,7 +1988,7 @@ elseif !exists('myprojects_enable')
 				call s:error('Unable to blame ''' . path . ''' because it is not a file.')
 			else
 				try
-					call s:echo('Performing svn blame on ''' . path . '''...')
+					call s:echo('Do svn blame on ''' . path . '''...')
 					let output = s:svn('blame -v ' . shellescape(path))
 					call s:message('Svn blame on ''' . path . ''' done.')
 
@@ -1957,9 +2009,9 @@ elseif !exists('myprojects_enable')
 						let buffer[line] = blame[line] . buffer[line]
 					endfor
 
-					silent %d
-					silent 0put=buffer
-					silent $d
+					silent! normal! %d
+					silent! 0put=buffer
+					silent! normal! $d
 					silent normal! 1gg
 
 					setlocal nomodifiable
@@ -1988,7 +2040,7 @@ elseif !exists('myprojects_enable')
 				let myprojects = {}
 				let name = s:inputName('Name of new project: ')
 				let myprojects[name] = {'attributes': {}, 'files': []}
-				let myprojects[name]['attributes']['path'] = s:inputPath('Path of project ''' . name . ''': ', 0)
+				let myprojects[name]['attributes']['path'] = s:inputPath('Path of project ''' . name . ''': ', '', 0)
 				let myprojects[name]['attributes']['cd'] = s:inputCd('Working directory of project ''' . name . ''': ', myprojects[name]['attributes']['path'], '')
 				let filter = s:inputFilter('Filter of project ''' . name . ''': ', '')
 
@@ -2005,38 +2057,33 @@ elseif !exists('myprojects_enable')
 				if svn == ''
 					throw 'Svn repository must not be empty.'
 				else
-					try
-						call s:echo('Performing svn checkout of ''' . svn . ''' in ''' . myprojects[name]['attributes']['path'] . '''...')
-						let output = s:svn('checkout ' . shellescape(svn) . ' ' . shellescape(myprojects[name]['attributes']['path']))
-						call s:message('Svn checkout of ''' . svn . ''' in ''' . myprojects[name]['attributes']['path'] . ''' done.')
+					let svnCommand = 'checkout --non-interactive ' . shellescape(svn)
 
-						let files = filter(split(output, "\n"), "v:val =~# '^[ADUCGE[:space:]]\\{4}\\s'")
+					let svnUser = s:input('Svn user of project ''' . name . ''': ', '')
 
-						if g:myprojects_sort_svn
-							let files = sort(files)
+					if svnUser != ''
+						let svnCommand .=  ' --username ' . shellescape(svnUser)
+
+						let svnPassword = s:inputSecret('Svn password of project ''' . name . ''': ', '')
+
+						if svnPassword != ''
+							let svnCommand .= ' --password ' . shellescape(svnPassword)
 						endif
+					endif
 
-						let lines = s:buildSvnMessage('', files, '')
+					let svnCommand .= ' ' . shellescape(myprojects[name]['attributes']['path'])
 
+					try
+						call s:echo('Do svn checkout of ''' . svn . ''' in ''' . myprojects[name]['attributes']['path'] . '''...')
+						call s:svn(svnCommand)
+						call s:message('Svn checkout of ''' . svn . ''' in ''' . myprojects[name]['attributes']['path'] . ''' done.')
 						call s:echo('Create project ''' . name . ''' from path ''' . myprojects[name]['attributes']['path'] . '''...')
-						call s:put(s:buildMyProjects('', filter, myprojects, indent), a:line)
-						call s:echo('Project ''' . name . ''' created.')
+						call s:put(s:buildMyProjects('', filter, myprojects, '', indent), '', a:line)
+						call s:message('Project ''' . name . ''' created.')
 						call s:echo(s:getPath(a:line))
-
-					catch
-						call s:errorMessage('Unable to checkout ''' . svn . ''' in ''' . myprojects[name]['attributes']['path'] . '''.')
-						let lines = s:buildSvnMessage('Unable to checkout ''' . svn . ''' in ''' . myprojects[name]['attributes']['path'] . '''.', [], output)
+					catch /.*/
+						call s:svnError('Unable to checkout ''' . svn . ''' in ''' . myprojects[name]['attributes']['path'] . ''':', v:exception)
 					endtry
-
-					call s:createOneSvnWindow('svn checkout of ''' . svn . ''' in ''' . myprojects[name]['attributes']['path'] . '''%=[%3p%%]', 'svn')
-
-					setlocal buftype=nofile
-
-					call s:putList(lines, 1, 5)
-
-					setlocal nomodifiable
-
-					wincmd p
 				endif
 			catch /.*/
 				call s:error(v:exception)
@@ -2044,23 +2091,75 @@ elseif !exists('myprojects_enable')
 		endif
 	endfunction
 
-	" Function s:buildSvnMessage() {{{2
-	function s:buildSvnMessage(message, files, output)
-		let lines = []
-		
-		if a:message != ''
-			call add(lines, s:prompt . a:message)
+	" Function s:refreshSvnConflictWindow() {{{2
+	function s:refreshSvnConflictWindow(path)
+		try
+			call s:createSvnConflictWindow('Conflict files in ''' . a:path . '''', a:path)
+			call s:echo('Retrieve conflict files in ''' . a:path . '''...')
+			call s:putInMyProjectsWindow(filter(s:getSvnStatus(a:path), 'strpart(v:val, 0, 6) =~# ''C'''))
+			call s:echo('Conflict files retrieved in ''' . a:path . '''.')
+		catch /.*/
+			call s:svnError('Unable to retrieve conflict files in ''' . a:path . ''':', v:exception)
+		endtry
+	endfunction
+
+	" Function s:svnResolve() {{{2
+	function s:svnResolve(line)
+		let path = s:getPath(a:line)
+
+		if path != ''
+			call s:refreshSvnConflictWindow(path)
 		endif
+	endfunction
 
-		for file in a:files
-			call add(lines, file)
-		endfor
+	" Function s:svnMarkAsResolved() {{{2
+	function s:svnMarkAsResolved(path)
+		let conflictAreResolved = s:input('All conflicts are resolved [yN] ? [y/N] : ', 'N')
 
-		for line in split(a:output, "\n")
-			call add(lines, s:prompt . line)
-		endfor
+		if conflictAreResolved != 'y'
+			call s:echo('Conflicts not resolved on ''' . path . '''.')
+		else
+			let path = fnamemodify(bufname('%'), ':p')
 
-		return lines
+			try
+				call s:message('Do conflicts resolution on ''' . path . '''.')
+				call s:svn('resolved --non-interactive ' . shellescape(path))
+				call s:message('Conflicts resolved on ''' . path . '''.')
+				call s:refreshSvnConflictWindow(a:path)
+			catch /.*/
+				call s:svnError('Unable to resolve conflict for file ''' . path . ''':', v:exception)
+			endtry
+		endif
+	endfunction
+
+	" Function s:svnInfo() {{{2
+	function s:svnInfo(line)
+		let path = s:getPath(a:line)
+
+		if path != ''
+			try
+				call s:createSvnWindow('Svn info of ''' . path . '''')
+				call s:echo('Do svn info on ''' . path . '''...')
+
+				let lines = split(s:svn('info --non-interactive ' . shellescape(path)), "\n")
+
+				let maxLength = 0
+
+				for line in lines
+					let lineLength = strlen(substitute(line, '^\([^:]\+:\).*$', '\1', ''))
+
+					if lineLength > maxLength
+						let maxLength = lineLength
+					endif
+				endfor
+
+				call map(lines, 'repeat('' '', ' . maxLength . ' - strlen(substitute(v:val, ''^\([^:]\+:\).*$'', ''\1'', ''''))) . v:val')
+				call s:putInMyProjectsWindow(lines)
+				call s:message('Svn info done on path ''' . path . '''.')
+			catch /.*/
+				call s:svnError('Svn info failed on ''' . path . ''':', v:exception)
+			endtry
+		endif
 	endfunction
 
 	" Function s:getRawBuffers() {{{2
@@ -2112,15 +2211,15 @@ elseif !exists('myprojects_enable')
 
 			call map(projectBuffers, 'substitute(v:val, ''^' . a:path . ''', '''', '''')')
 
-			if s:createOneBufferWindow('Buffers of project ' . a:projectName . ' in ' . a:path, a:projectName, a:path)
+			if s:createBufferWindow('Buffers of project ''' . a:projectName . ''' in ''' . a:path . '''', a:projectName, a:path)
 				silent execute 'nnoremap <buffer> <silent> d :call <SID>deleteProjectBuffers(line(''.''), ''' . a:path .''')<CR>'
 				silent execute 'augroup ' . s:plugin
-				silent execute 'au BufNew * call' . s:sid . 'refreshProjectBuffers(''' . a:projectName . ''', ''' . a:path . ''', '''')'
-				silent execute 'au BufDelete * execute "call ' . s:sid . 'refreshProjectBuffers(''' . a:projectName . ''', ''' . a:path . ''', " . expand(''<abuf>'') . ")"'
+				silent execute 'au! BufNew * call' . s:sid . 'refreshProjectBuffers(''' . a:projectName . ''', ''' . a:path . ''', '''')'
+				silent execute 'au! BufDelete * execute "call ' . s:sid . 'refreshProjectBuffers(''' . a:projectName . ''', ''' . a:path . ''', " . expand(''<abuf>'') . ")"'
 				silent augroup END
 			endif
 
-			call s:putList(projectBuffers, 1, 0)
+			call s:putInMyProjectsWindow(projectBuffers)
 		endif
 	endfunction
 
@@ -2148,27 +2247,14 @@ elseif !exists('myprojects_enable')
 				if getbufvar(buffer, '&modified') == 1
 					call s:error('Sorry, no write since last change for buffer ' . line . ', unable to delete')
 				else
+					let position = getpos('.')
 					let currentBuffer = bufnr('%')
 
 					silent! execute 'bdelete ' . buffer
 
-					silent execute bufwinnr(currentBuffer) . ' wincmd w'
-
-					setlocal modifiable
-					silent normal! dd
-					setlocal nomodifiable
-
-					let buffers = getbufline('%', 1, '$')
-
-					if len(buffers) > 1
-						call s:setWindowHeight(winheight(0) - 1)
-					elseif buffers[0] == ''
-						if winnr('$') == 1
-							confirm qall
-						else
-							hide
-						endif
-					else
+					if !s:quitVim()
+						silent! execute bufwinnr(currentBuffer) . ' wincmd w'
+						call setpos('.', position)
 					endif
 				endif
 			endif
@@ -2190,7 +2276,6 @@ elseif !exists('myprojects_enable')
 		let path = ''
 
 		let projectPath = s:getProjectPath(a:line)
-		echomsg projectPath
 
 		if s:windowsOs
 			let projectPath = substitute(projectPath, '^[a-zA-Z]:\(.*\)', '', '')
@@ -2259,9 +2344,9 @@ elseif !exists('myprojects_enable')
 		if !filereadable(session)
 			call s:error('Unable to read session file ''' . session . '''.')
 		else
-			let s:closeIfAlone = 0
+			let s:quitVimIfMyProjectsIsAlone = 0
 			execute 'source ' . session
-			let s:closeIfAlone = 1
+			let s:quitVimIfMyProjectsIsAlone = 1
 
 			if has('syntax') && g:myprojects_syntax
 				syntax on
@@ -2346,7 +2431,7 @@ elseif !exists('myprojects_enable')
 	endfunction
 
 	" Function s:buildMyProjects() {{{2
-	function s:buildMyProjects(path, filter, myprojects, indent)
+	function s:buildMyProjects(path, filter, myprojects, refresh, indent)
 		let myprojects = ''
 
 		let filter = a:filter
@@ -2394,10 +2479,10 @@ elseif !exists('myprojects_enable')
 					let files = ''
 
 					for subName in subFiles
-						let files .= s:buildMyProjects(path, filter, subName, a:indent + 1)
+						let files .= s:buildMyProjects(path, filter, subName, a:refresh, a:indent + 1)
 					endfor
 
-					let notInMyProjectsFiles = s:getFilesNotInMyprojects(path, filter, a:indent, subFiles)
+					let notInMyProjectsFiles = s:getFilesNotInMyprojects(path, filter, a:indent, a:refresh, subFiles)
 
 					if g:myprojects_new_file_on_bottom
 						let files .= notInMyProjectsFiles
@@ -2429,20 +2514,30 @@ elseif !exists('myprojects_enable')
 	endfunction
 
 	" Function s:getFilesNotInMyprojects() {{{2
-	function s:getFilesNotInMyprojects(path, filter, indent, myprojects)
+	function s:getFilesNotInMyprojects(path, filter, indent, refresh, myprojects)
 		let myprojects = ''
 
-		let cwd = getcwd()
+		let path = resolve(a:path)
 
-		silent execute 'lcd ' . fnameescape(a:path)
+		if getftype(path) != 'dir'
+			call s:warningMessage('Path ''' . path . ''' is not a directory.')
+		else
+			let cwd = getcwd()
 
-		for globName in sort(filter(split(glob('*') . "\n" . glob('.*'), "\n"), 'v:val != "." && v:val != ".."'))
-			if !s:isInMyprojects(globName, a:myprojects)
-				let myprojects .= s:buildMyProjects(a:path, a:filter, {globName : {}}, a:indent + 1)
-			endif
-		endfor
+			try
+				silent execute 'lcd ' . fnameescape(path)
 
-		silent execute 'lcd ' . fnameescape(cwd)
+				for globName in sort(filter(split(glob('*') . "\n" . glob('.*'), "\n"), 'v:val != "." && v:val != ".."'))
+					if !s:isInMyprojects(globName, a:myprojects) && getftime(fnamemodify(globName, ':p')) > a:refresh
+						let myprojects .= s:buildMyProjects(path, a:filter, {globName : {}}, a:refresh, a:indent + 1)
+					endif
+				endfor
+
+				silent execute 'lcd ' . fnameescape(cwd)
+			catch /E472/
+				call s:warningMessage('Unable to go to working directory ''' . path . '''.')
+			endtry
+		endif
 
 		return myprojects
 	endfunction
@@ -2472,22 +2567,36 @@ elseif !exists('myprojects_enable')
 			wincmd p
 			call s:error('Unable to find ''' . path . ''' in ' . s:plugin . '.')
 		else
-			try
-				call s:edit(a:command, line)
-			catch /.*/
-				call s:error(v:exception)
-			endtry
+			call s:edit(a:command, line)
 		endif
+	endfunction
+
+	" Function s:resolveSvnConflict() {{{2
+	function s:resolveSvnConflict(command, path)
+		try
+			call s:openFromMyProjectsWindow(a:command, getline('.'))
+			execute 'au! ' . s:plugin . ' BufWritePost <buffer> call ' . s:sid . 'svnMarkAsResolved(''' . a:path . ''')'
+		catch /.*/
+			call s:error(v:exception)
+		endtry
 	endfunction
 
 	" Function s:openFromSvnWindow() {{{2
 	function s:openFromSvnWindow(command)
-		call s:openFromMyProjectsWindow(a:command, getline('.'))
+		try
+			call s:openFromMyProjectsWindow(a:command, getline('.'))
+		catch /.*/
+			call s:error(v:exception)
+		endtry
 	endfunction
 
 	" Function s:openFromBuffersWindow() {{{2
 	function s:openFromBuffersWindow(command, path)
-		call s:openFromMyProjectsWindow(a:command, a:path . getline('.'))
+		try
+			call s:openFromMyProjectsWindow(a:command, a:path . getline('.'))
+		catch /.*/
+			call s:error(v:exception)
+		endtry
 	endfunction
 
 	" Function s:svnDiffFromMyProjectWindow() {{{2
@@ -2538,7 +2647,7 @@ elseif !exists('myprojects_enable')
 	function s:input(prompt, ...)
 		redraw
 
-		let prompt = s:prompt . a:prompt
+		let prompt = s:getPromptedString(a:prompt)
 
 		if a:0 == 0
 			return input(prompt)
@@ -2549,6 +2658,18 @@ elseif !exists('myprojects_enable')
 		endif
 	endfunction
 
+	" Function s:inputSecret() {{{2
+	function s:inputSecret(prompt, ...)
+		redraw
+
+		let prompt = s:getPromptedString(a:prompt)
+
+		if a:0 == 0
+			return inputsecret(prompt)
+		elseif a:0 == 1
+			return inputsecret(prompt, a:1)
+		endif
+	endfunction
 	" Function s:indent() {{{2
 	function s:indent(line)
 		let indent = indent(a:line)
@@ -2564,62 +2685,95 @@ elseif !exists('myprojects_enable')
 	function s:put(data, line)
 		if a:data != ''
 			silent execute a:line - 1 . 'put =a:data'
-			silent normal! j
-			if getline('.') =~ '^$'
-				silent normal! dd
+
+			let nextLine = line('.') + 1
+
+			if nextLine <= line('$') && getline(nextLine) =~ '^$'
+				silent! execute ':' . nextLine . 'd'
 			endif
+
 			call s:goToLine(a:line)
 		endif
 	endfunction
 
-	" Function s:putList() {{{2
-	function s:putList(lines, goToLine, height)
+	" Function s:putInMyProjectsWindow() {{{2
+	function s:putInMyProjectsWindow(lines)
 		setlocal modifiable
+		silent! %d
+		silent! 0put =substitute(join(a:lines, \"\n\"), '\n\s*$', '', '')
+		silent! $d
+		setlocal nomodifiable
+		setlocal nomodified
+		setlocal buftype=nofile
 
-		let put = join(a:lines, "\n")
+		call s:goToLine(1)
+		call s:setWindowHeight(line('$'))
+	endfunction
 
-		silent execute ':%d'
+	" Function s:getPromptedString() {{{2
+	function s:getPromptedString(message)
+		return s:prompt . a:message
+	endfunction
 
-		let height = a:height > 0 ? a:height : len(a:lines)
-
-		call s:setWindowHeight(height)
-
-		silent 0put =put
-		silent $d
-		call s:goToLine(a:goToLine)
+	" Function s:getPromptedStringLength() {{{2
+	function s:getPromptedStringLength(message)
+		return strlen(s:getPromptedString(a:message)) + 20
 	endfunction
 
 	" Function s:echo() {{{2
 	function s:echo(message)
 		redraw
-		echo s:prompt . a:message
+		echo s:getPromptedString(a:message)
 	endfunction
 
 	" Function s:echoPath() {{{2
 	function s:echoPath()
 		if winbufnr(0) == s:buffer
-			call s:echo(s:getPath(line('.')))
+			let path = s:getPath(line('.'))
+
+			if s:getPromptedStringLength(path) > &columns
+				let path = pathshorten(path)
+
+				if s:getPromptedStringLength(path) > &columns
+					let path = s:getName(line('.'))
+
+					if s:getPromptedStringLength(path) > &columns
+						let path = ''
+					endif
+				endif
+			endif
+
+			if path != ''
+				call s:echo(path)
+			endif
 		endif
 	endfunction
 
 	" Function s:error() {{{2
 	function s:error(message)
-		echohl errorMsg
+		echohl ErrorMsg
 		call s:echo(a:message)
-		echohl normal
+		echohl Normal
 	endfunction
 
 	" Function s:message() {{{2
 	function s:message(message)
 		redraw
-		echomsg s:prompt . a:message
+		echomsg s:getPromptedString(a:message)
 	endfunction
 
 	" Function s:errorMessage() {{{2
 	function s:errorMessage(message)
-		echohl errorMsg
+		echohl ErrorMsg
 		call s:message(a:message)
-		echohl normal
+		echohl Normal
+	endfunction
+
+	" Function s:warningMessage() {{{2
+	function s:warningMessage(message)
+		echohl WarningMsg
+		call s:message(a:message)
+		echohl Normal
 	endfunction
 
 	" Function s:escape() {{{2
@@ -2635,26 +2789,37 @@ elseif !exists('myprojects_enable')
 	" Function s:goToLine() {{{2
 	function s:goToLine(line)
 		silent execute 'normal! ' . a:line . 'G'
+		silent normal |
 	endfunction
 
 	" Function s:getFiles() {{{2
 	function s:getFiles(path, filter)
 		let files = ''
 
-		if isdirectory(a:path)
+		let path = resolve(a:path)
+
+		if !isdirectory(path)
+			call s:warningMessage('Path ''' . path . ''' is not a directory.')
+		else
 			let cwd = getcwd()
 
-			silent execute 'lcd ' . a:path
+			try
+				silent execute 'lcd ' . path
 
-			for inode in sort(split(glob('*'), "\n"))
-				if isdirectory(inode)
-					let files .= ' ' . s:getFiles(a:path . s:osSlash . inode, a:filter)
-				elseif a:filter == '' || match(inode, a:filter) != -1
-					let files .= ' ' . a:path . s:osSlash . inode
-				endif
-			endfor
+				for inode in sort(split(glob('*'), "\n"))
+					let inode = resolve(inode)
 
-			silent execute 'lcd ' . cwd
+					if isdirectory(inode)
+						let files .= ' ' . s:getFiles(path . s:osSlash . inode, a:filter)
+					elseif a:filter == '' || match(inode, a:filter) != -1
+						let files .= ' ' . path . s:osSlash . inode
+					endif
+				endfor
+
+				silent execute 'lcd ' . cwd
+			catch /E472/
+				call s:warningMessage('Unable to go to directory ''' . path . '''.')
+			endtry
 		endif
 
 		return files
@@ -2714,8 +2879,8 @@ elseif !exists('myprojects_enable')
 		endif
 	endfunction
 
-	" Function s:floatWindow() {{{2
-	function s:floatWindow()
+	" Function s:moveWindowToTopLeftCorner() {{{2
+	function s:moveWindowToTopLeftCorner()
 		silent wincmd H
 	endfunction
 

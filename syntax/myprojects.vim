@@ -7,47 +7,11 @@
 if !exists('b:current_syntax')
 	syn case match
 
-	syntax match MyProjectsFile '.'
-	highlight default MyProjectsFile ctermfg=lightgreen guifg=#60ff60 gui=none cterm=none
+	syntax match MyProjectsFile '^\(\t*\)\zs[^\t\n][^\t]*\n\ze'
+	highlight default MyProjectsFile guifg=lightgreen
 
-	syntax match MyProjectsFolder '^\(\t*\)[^\t\n][^\t]*\n\ze\t\1'
-	highlight default MyProjectsFolder guifg=cyan ctermfg=cyan
-
-	syntax match MyProjectsSvnDialog '^\[myprojects\]\s[^\s].\+$'
-	highlight default MyProjectsSvnDialog guifg=white ctermfg=white
-
-	syntax match MyProjectsSvnA '^A[ CM][ L][ +][ S]\?[ KOTB]\?\s[^\s].\+$'
-	highlight default MyProjectsSvnA guifg=blue ctermfg=blue
-
-	syntax match MyProjectsSvnU '^U[ CM][ L][ +][ S]\?[ KOTB]\?\s[^\s].\+$'
-	highlight default MyProjectsSvnU guifg=yellow ctermfg=yellow
-
-	syntax match MyProjectsSvnC '^\%(C[ CM][ L][ +][ S]\?[ KOTB]\?\|[ AKDIMRX?!~]C[ L][ +][ S]\?[ KOTB]\?\)\s[^\s].\+$'
-	highlight default MyProjectsSvnC guifg=magenta ctermfg=magenta
-
-	syntax match MyProjectsSvnD '^D[ CM][ L][ +][ S]\?[ KOTB]\?\s[^\s].\+$'
-	highlight default MyProjectsSvnD guifg=red ctermfg=red
-
-	syntax match MyProjectsSvnI '^I[ CM][ L][ +][ S]\?[ KOTB]\?\s[^\s].\+$'
-	highlight default MyProjectsSvnI guifg=lightgray ctermfg=lightgray
-
-	syntax match MyProjectsSvnM '^\%(M[CM][ L][ +][ S]\?[ KOTB]\?\|[ AKDIMRX?!~]M[ L][ +][ S]\?[ KOTB]\?\)\s[^\s].\+$'
-	highlight default MyProjectsSvnM guifg=green ctermfg=green
-
-	syntax match MyProjectsSvnR '^(R[ CM][ L][ +][ S]\?[ KOTB]\?\s[^\s].\+$'
-	highlight default MyProjectsSvnR guifg=yellow ctermfg=yellow
-
-	syntax match MyProjectsSvnX '^X[ CM][ L][ +][ S]\?[ KOTB]\?\s[^\s].\+$'
-	highlight default MyProjectsSvnX guifg=gray ctermfg=gray
-
-	syntax match MyProjectsSvnQuestion '^?[ CM][ L][ +][ S]\?[ KOTB]\?\s[^\s].\+$'
-	highlight default MyProjectsSvnQuestion guifg=brown ctermfg=brown
-
-	syntax match MyProjectsSvnExclamation '^![ CM][ L][ +][ S]\?[ KOTB]\?\s[^\s].\+$'
-	highlight default MyProjectsSvnExclamation guifg=purple
-
-	syntax match MyProjectsSvnTilde '^\~[ CM][ L][ +][ S]\?[ KOTB]\?\s[^\s].\+$'
-	highlight default MyProjectsSvnTilde guifg=orange
+	syntax match MyProjectsFolder '^\(\t*\)\zs[^\t\n][^\t]*\n\ze\t\1'
+	highlight default MyProjectsFolder guifg=lightblue
 
 	let b:current_syntax = "myprojects"
 endif
