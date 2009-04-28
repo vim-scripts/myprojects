@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Fri Apr 17 08:57:12 CEST 2009
+" Date:						Fri Apr 24 16:12:33 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.80'
+	let s:version = '0.0.86'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -33,9 +33,10 @@ elseif !exists('myprojects_enable')
 	let s:oldWidth = 0
 	let s:windowsOs = has('win16') || has('win32') || has('win64')
 	let s:osSlash = s:windowsOs ? '\' : '/'
-	let s:home = expand('$HOME')
+	let s:home = expand('$HOME', ':p')
 	let s:quitVimIfMyProjectsIsAlone = 1
 	let s:refreshProjectBuffers = 1
+	let s:loadAttributes = 1
 	let s:diffBuffers = []
 	let s:preferences = {}
 
@@ -121,7 +122,7 @@ elseif !exists('myprojects_enable')
 		if !filewritable(preferencesDirectory)
 			throw 'Unable to write in ''' . preferencesDirectory . '''.'
 		else
-			call writefile(['let s:preferences = ' . string(s:preferences)], g:myprojects_preferences_file)
+			call writefile([string(s:preferences)], g:myprojects_preferences_file)
 		endif
 	endfunction
 
@@ -137,6 +138,53 @@ elseif !exists('myprojects_enable')
 					let s:preferences = preferences
 				endif
 			endif
+		endif
+	endfunction
+
+	" Function s:definePreferences()
+	function s:definePreferences()
+		let type = s:input('Preferences for type: ', '')
+
+		if type == ''
+			call s:error('Preferences type must not be empty.')
+		else
+			call s:readMyProjectsPreferences()
+
+			let mappings = {'1': '', '2': '', '3': '', '4': '', '5': '', '6': '', '7': '', '8': '', '9': '', '10': '', '11': '', '12': ''}
+
+			if !has_key(s:preferences, type)
+				let s:preferences[type] = {'path': '', 'cd': '', 'filter': '', 'make': '', 'errorFormat': '', 'mappings': mappings}
+			else
+				let s:preferences[type]['path'] = !has_key(s:preferences[type], 'path') ? '': s:preferences[type]['path']
+				let s:preferences[type]['cd'] = !has_key(s:preferences[type], 'cd') ? '': s:preferences[type]['cd']
+				let s:preferences[type]['filter'] = !has_key(s:preferences[type], 'filter') ? '': s:preferences[type]['filter']
+				let s:preferences[type]['make'] = !has_key(s:preferences[type], 'make') ? '': s:preferences[type]['make']
+				let s:preferences[type]['errorFormat'] = !has_key(s:preferences[type], 'errorFormat') ? '': s:preferences[type]['errorFormat']
+
+
+				if has_key(s:preferences[type], 'mappings')
+					for [key, mapping] in items(s:preferences[type]['mappings'])
+						let mappings[key] = mapping
+					endfor
+				endif
+			endif
+
+			let s:preferences[type]['path'] = s:inputRealPath('Path for type ''' . type . ''': ', s:preferences[type]['path'], 0)
+			let s:preferences[type]['cd'] = s:inputCd('Working directory for type ''' . type . ''': ', s:preferences[type]['cd'], s:preferences[type]['cd'])
+			let s:preferences[type]['filter'] = s:inputFilter('Filter for type ''' . type . ''': ', s:preferences[type]['filter'])
+			let s:preferences[type]['make'] = s:inputMake('Make for type ''' . type . ''': ', s:preferences[type]['make'])
+			let s:preferences[type]['errorformat'] = s:inputErrorFormat('Error format for type ''' . type . ''': ', s:preferences[type]['errorFormat'])
+			let s:preferences[type]['mappings'] = {'1': '', '2': '', '3': '', '4': '', '5': '', '6': '', '7': '', '8': '', '9': '', '10': '', '11': '', '12': ''}
+
+			let mappings = s:inputMappings('Mappings for type ''' . type . ''': ', mappings)
+
+			for [key, mapping] in items(mappings)
+					let s:preferences[type]['mappings'][key] = mapping
+			endfor
+
+			call s:message('Save preferences for type ''' . type . '''...')
+			call s:writeMyProjectsPreferences()
+			call s:message('Preferences saved for type ''' . type . '''.')
 		endif
 	endfunction
 
@@ -174,10 +222,10 @@ elseif !exists('myprojects_enable')
 			nnoremap <silent> <buffer> <LocalLeader>s :call <SID>saveSession(line('.'))<CR>
 			nnoremap <silent> <buffer> <LocalLeader>S :call <SID>loadSession(line('.'))<CR>
 			nnoremap <silent> <buffer> <LocalLeader><A-s> :call <SID>deleteSession(line('.'))<CR>
-			nnoremap <silent> <buffer> <LocalLeader>p :call <SID>setPath(line('.'), 1)<CR>
-			nnoremap <silent> <buffer> <LocalLeader>P :call <SID>updatePath(line('.'), 1)<CR>
-			nnoremap <silent> <buffer> <LocalLeader>f :call <SID>setFilter(line('.'), 1)<CR>
-			nnoremap <silent> <buffer> <LocalLeader>F :call <SID>updateFilter(line('.'), 1)<CR>
+			nnoremap <silent> <buffer> <LocalLeader>p :call <SID>setPath(line('.'))<CR>
+			nnoremap <silent> <buffer> <LocalLeader>P :call <SID>updatePath(line('.'))<CR>
+			nnoremap <silent> <buffer> <LocalLeader>f :call <SID>setFilter(line('.'))<CR>
+			nnoremap <silent> <buffer> <LocalLeader>F :call <SID>updateFilter(line('.'))<CR>
 			nnoremap <silent> <buffer> <LocalLeader>w :call <SID>setCd(line('.'))<CR>
 			nnoremap <silent> <buffer> <LocalLeader>W :call <SID>updateCd(line('.'))<CR>
 			nnoremap <silent> <buffer> <LocalLeader>m :call <SID>setMappings(line('.'))<CR>
@@ -199,6 +247,7 @@ elseif !exists('myprojects_enable')
 			nnoremap <silent> <buffer> <LocalLeader>si :call <SID>svnInfo(line('.'))<CR>
 			nnoremap <silent> <buffer> <LocalLeader>sC :call <SID>svnCheckout(line('.'))<CR>
 			nnoremap <silent> <buffer> <LocalLeader>src :call <SID>svnResolve(line('.'))<CR>
+			nnoremap <silent> <buffer> <LocalLeader>df :call <SID>definePreferences()<CR>
 
 			if g:myprojects_display_path_in_statusline
 				nnoremap <silent> <buffer> <Down> <Down>:call <SID>echoPath()<CR>
@@ -244,8 +293,6 @@ elseif !exists('myprojects_enable')
 			silent execute 'setlocal foldexpr=' . s:sid . 'foldexpr()'
 			silent execute 'setlocal foldcolumn=' . g:myprojects_foldcolumn
 
-			silent execute 'au BufEnter * let &titlestring = ''' . &titlestring . ''''
-
 			silent execute 'augroup ' . s:plugin
 			silent au!
 
@@ -261,8 +308,11 @@ elseif !exists('myprojects_enable')
 				silent au WinEnter <buffer> set nocursorcolumn
 			endif
 
+			silent execute 'au BufEnter * let &titlestring = ''' . substitute(&titlestring, "'", "''", 'g') . ''''
+			silent execute 'au BufRead * call ' . s:sid . 'loadMyProjectsAttributes()'
 			silent execute 'au BufEnter <buffer> let &titlestring = ''' . substitute(s:prompt, "'", "''", 'g') . ''''
-			silent execute 'au WinEnter * call ' . s:sid . 'quitVim()'
+			silent execute 'au WinEnter ' . g:myprojects_file . ' call ' . s:sid . 'quitVim()'
+			silent execute 'au WinEnter ' . s:sid . '* call ' . s:sid . 'quitVim()'
 			silent augroup END
 
 			silent execute 'setlocal filetype=' . s:plugin
@@ -388,12 +438,12 @@ elseif !exists('myprojects_enable')
 		silent execute 'augroup ' . s:plugin
 
 		if g:myprojects_cursorline
-			silent au WinEnter <buffer> set cursorline nocursorcolumn
+			silent au! WinEnter <buffer> set cursorline nocursorcolumn
 		else
-			silent au WinEnter <buffer> set nocursorline nocursorcolumn
+			silent au! WinEnter <buffer> set nocursorline nocursorcolumn
 		endif
 
-		silent execute 'au BufEnter <buffer> let &titlestring = ''' . substitute(s:prompt . a:title, "'", "''", 'g') . ''''
+		silent execute 'au! BufEnter <buffer> let &titlestring = ''' . substitute(s:prompt . a:title, "'", "''", 'g') . ''''
 		silent augroup END
 
 		if has('syntax') && g:myprojects_syntax
@@ -743,26 +793,28 @@ elseif !exists('myprojects_enable')
 	function s:extractMappings(line)
 		let mappings = {}
 
-		let line = a:line
+		let key = 1
 
-		while line > 0 && line <= line('$') && len(mappings) < 12
-			let currentLine = getline(line)
+		while key <= 12
+			let mapping = ''
 
-			let index = 1
+			let line = a:line
 
-			while index <= 12
-				if !has_key(mappings, index) && s:hasMapping('F' . index, line)
-					let mapping = substitute(currentLine, '.*\s\+F' . index . '="\([^"]\+\)".*', '\1', '')
-
-					if mapping != ''
-						let mappings[line] = {index : mapping}
-					endif
-				endif
-
-				let index += 1
+			while line > 0 && !s:hasMapping('F' . key, line)
+				let line = s:getFirstFolderLine(line)
 			endwhile
 
-			let line = s:getFirstFolderLine(line)
+			if line > 0
+				let mapping = s:extractAttributeFromLine('F' . key, line)
+
+				if has_key(mappings, line)
+					let mappings[line][key] = mapping
+				else
+					let mappings[line] = { key : mapping }
+				endif
+			endif
+
+			let key += 1
 		endwhile
 
 		return mappings
@@ -902,7 +954,7 @@ elseif !exists('myprojects_enable')
 			let index = inputlist(list)
 
 			if has_key(keys, index)
-				let inputs[keys[index]] = s:input('Mapping for F' . keys[index] . ': ', '')
+				let inputs[keys[index]] = s:input('Mapping for F' . keys[index] . ': ', !has_key(inputs, index) ? '' : inputs[index])
 				redraw
 			endif
 		endwhile
@@ -933,28 +985,40 @@ elseif !exists('myprojects_enable')
 		if indent >= 0
 			try
 				let myprojects = {}
-
-				let path = ''
-				let filter = ''
-				let make = ''
-				let errorFormat = ''
-				let mappings = {}
+				let attributes = {'path': '', 'filter': '', 'make': '', 'errorFormat': '', 'mappings': {}}
 
 				call s:readMyProjectsPreferences()
 
+				if len(s:preferences) > 0
+					let availableTypes = keys(s:preferences)
+					let index = 1
+					let types = ['Type of project: ']
+
+					for type in availableTypes
+						call add(types, index . '. ' . type)
+						let index += 1
+					endfor
+
+					try
+						call extend(attributes, s:preferences[availableTypes[inputlist(types) - 1]], 'force')
+					catch /.*/
+						throw 'Project type is invalid.'
+					endtry
+				endif
+
 				let name = s:inputName('Name of new project: ')
 				let myprojects[name] = {'attributes': {}, 'files': []}
-				let myprojects[name]['attributes']['path'] = s:inputRealPath('Path of project ''' . name . ''': ', path, 0)
+				let myprojects[name]['attributes']['path'] = s:inputRealPath('Path of project ''' . name . ''': ', attributes['path'], 0)
 				let myprojects[name]['attributes']['cd'] = s:inputCd('Working directory of project ''' . name . ''': ', myprojects[name]['attributes']['path'], myprojects[name]['attributes']['path'])
-				let filter = s:inputFilter('Filter of project ''' . name . ''': ', filter)
+				let filter = s:inputFilter('Filter of project ''' . name . ''': ', attributes['filter'])
 
 				if filter != ''
 					let myprojects[name]['attributes']['filter'] = filter
 				endif
 
-				let myprojects[name]['attributes']['make'] = s:inputMake('Make of project ''' . name . ''': ', make)
-				let myprojects[name]['attributes']['errorformat'] = s:inputErrorFormat('Error format of project ''' . name . ''': ', errorFormat)
-				let myprojects[name]['attributes']['mappings'] = s:inputMappings('Mappings of project ''' . name . ''': ', mappings)
+				let myprojects[name]['attributes']['make'] = s:inputMake('Make of project ''' . name . ''': ', attributes['make'])
+				let myprojects[name]['attributes']['errorformat'] = s:inputErrorFormat('Error format of project ''' . name . ''': ', attributes['errorFormat'])
+				let myprojects[name]['attributes']['mappings'] = s:inputMappings('Mappings of project ''' . name . ''': ', attributes['mappings'])
 
 				call s:echo('Create project ''' . name . ''' from path ''' . myprojects[name]['attributes']['path'] . '''...')
 				call s:put(s:buildMyProjects('', filter, myprojects, '', indent), a:line)
@@ -1005,8 +1069,9 @@ elseif !exists('myprojects_enable')
 						let foldlevel -= 1
 					endwhile
 
-					call s:updateRefresh(line)
 				endif
+
+				call s:updateRefresh(line, localtime())
 
 				call s:echo('Refresh done for ''' . path . '''.')
 			endif
@@ -1056,6 +1121,8 @@ elseif !exists('myprojects_enable')
 				endif
 
 				if files != ''
+					let s:loadAttributes = 0
+
 					try
 						call s:echo('Do grep on ''' . path . ''' with pattern ''' . pattern . '''...')
 						silent execute 'vimgrep /' . escape(pattern, '/') . '/jg ' . files
@@ -1066,6 +1133,8 @@ elseif !exists('myprojects_enable')
 					catch
 						call s:error(v:exception)
 					endtry
+
+					let s:loadAttributes = 1
 				endif
 			endif
 		endif
@@ -1115,9 +1184,13 @@ elseif !exists('myprojects_enable')
 					let tagsPath = rootPath . s:osSlash . g:myprojects_tags_file
 
 					try
-						call s:echo('Do tags file generation in ''' . tagsPath . ''' for project ''' . s:getProjectName(a:line) . '''...')
+						call s:echo('Generate tags file in ''' . tagsPath . ''' for project ''' . s:getProjectName(a:line) . '''...')
 						call s:system(g:myprojects_tags_generator, '-f ' . tagsPath . ' -R ' . rootPath)
-						call s:message('Tags file generation done for project ''' . s:getProjectName(a:line) . ''' and stored in ''' . tagsPath . '''.')
+						call s:message('Tags file generated for project ''' . s:getProjectName(a:line) . ''' and stored in ''' . tagsPath . '''.')
+
+						if &tags !~ '^' . tagsPath . ',\?'
+							silent execute 'set tags=' . tagsPath . ',' . &tags
+						endif
 					catch /.*/
 						call s:message('Unable to generate tags file for project ''' . s:getProjectName(a:line) . ''' : ' . v:exception)
 					endtry
@@ -1223,7 +1296,7 @@ elseif !exists('myprojects_enable')
 
 		for [line, mapping] in items(mappings)
 			for [key, value] in items(mapping)
-				silent execute 'nmap <buffer> <silent> <F' . key . '> ' . expand(value)
+				silent execute 'nnoremap <buffer> <silent> <F' . key . '> ' . expand(value)
 			endfor
 		endfor
 
@@ -1241,7 +1314,11 @@ elseif !exists('myprojects_enable')
 			map <buffer> <silent> <C-Tab> <Plug>MyProjectsGoTo
 		endif
 
+		nnoremap <silent> <buffer> <LocalLeader>ra :call <SID>openFromMyProjectsWindow('edit', fnamemodify(bufname('%'), ':p'))<CR>
+
 		silent execute 'nnoremap <buffer> <silent> <LocalLeader>b :call <SID>displayProjectBuffers(''' . projectName. ''', ''' . projectPath . ''', '''')<CR>'
+
+		let b:myprojectsAttributesLoaded = 1
 	endfunction
 
 	" Function s:append() {{{2
@@ -1375,7 +1452,7 @@ elseif !exists('myprojects_enable')
 	endfunction
 
 	" Function s:setPath() {{{2
-	function s:setPath(line, refresh)
+	function s:setPath(line)
 		if !s:hasPath(a:line)
 			let currentPath = s:getPath(a:line)
 
@@ -1385,10 +1462,7 @@ elseif !exists('myprojects_enable')
 
 					if newPath != '' && newPath != currentPath
 						call s:substitute(a:line, '\(^\t*[^\t]\%(\\ \|\f\)\+\)', '\1=' . newPath, '')
-
-						if a:refresh
-							call s:refresh(pathLine, 0)
-						endif
+						call s:refresh(pathLine, 0)
 					endif
 				catch /.*/
 					call s:error(v:exception)
@@ -1420,7 +1494,7 @@ elseif !exists('myprojects_enable')
 	endfunction
 
 	" Function s:setFilter() {{{2
-	function s:setFilter(line, refresh)
+	function s:setFilter(line)
 		let line = s:isFolder(a:line) ? a:line : s:getFirstFolderLine(a:line)
 
 		if line > 0 && !s:hasFilter(line)
@@ -1430,10 +1504,8 @@ elseif !exists('myprojects_enable')
 
 			if newFilter != currentFilter
 				call s:updateAttribute(line, 'filter', newFilter)
-
-				if a:refresh
-					call s:refresh(line, 0)
-				endif
+				call s:updateRefresh(line, '')
+				call s:refresh(line, 0)
 			endif
 		endif
 	endfunction
@@ -1511,7 +1583,7 @@ elseif !exists('myprojects_enable')
 	endfunction
 
 	" Function s:updatePath() {{{2
-	function s:updatePath(line, refresh)
+	function s:updatePath(line)
 		let path = s:getNestedPath(a:line)
 
 		if !empty(path)
@@ -1524,13 +1596,10 @@ elseif !exists('myprojects_enable')
 					if newPath == currentPath
 						call s:echo('Path not updated for ''' . path . '''.')
 					else
+						call s:echo('Update path with ''' . newPath . '''...')
 						call s:substitute(pathLine, '^.*$', s:getName(pathLine) . '=' . newPath . ' ' . substitute(substitute(getline(pathLine), '^\t*[^\t].\{-}\(\%(\\\)\@<!\%( \|=\)\)', '\1', ''), '^=.\{-}\%(\\\)\@<! \(.*$\)', '\1', ''), '')
-
-						if a:refresh
-							call s:refresh(pathLine, 0)
-						endif
-
-						call s:message('Update done for path with ''' . newPath . '''.')
+						call s:refresh(pathLine, 0)
+						call s:message('Path updated with ''' . newPath . '''.')
 				endif
 			catch /.*/
 				call s:error(v:exception)
@@ -1552,8 +1621,9 @@ elseif !exists('myprojects_enable')
 				if newCd == currentCd
 					call s:echo('Working directory not updated for ''' . path . '''.')
 				else
+					call s:echo('Update working directory with ''' . newCd . ''' on ''' . path . '''...')
 					call s:updateAttribute(cdLine, 'cd', s:escape(newCd))
-					call s:message('Update done for working directory with ''' . newCd . ''' on ''' . path . '''.')
+					call s:message('Working directory updated with ''' . newCd . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
 				call s:error(v:exception)
@@ -1562,7 +1632,7 @@ elseif !exists('myprojects_enable')
 	endfunction
 
 	" Function s:updateFilter() {{{2
-	function s:updateFilter(line, refresh)
+	function s:updateFilter(line)
 		let filter = s:getNestedFilter(a:line)
 
 		if !empty(filter)
@@ -1575,13 +1645,11 @@ elseif !exists('myprojects_enable')
 				if newFilter == currentFilter
 					call s:echo('Filter not updated for ''' . path . '''.')
 				else
+					call s:echo('Update filter with ''' . newFilter . ''' on ''' . path . '''...')
 					call s:updateAttribute(filterLine, 'filter', newFilter)
-
-					if a:refresh
-						call s:refresh(filterLine, 0)
-					endif
-
-					call s:message('Update done for filter with ''' . newFilter . ''' on ''' . path . '''.')
+					call s:updateRefresh(filterLine, '')
+					call s:refresh(filterLine, 0)
+					call s:message('Filter updated with ''' . newFilter . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
 				call s:error(v:exception)
@@ -1624,8 +1692,9 @@ elseif !exists('myprojects_enable')
 				if newMake == currentMake
 					call s:echo('Make not updated for ''' . path . '''.')
 				else
+					call s:echo('Update make with ''' . newMake . ''' on ''' . path . '''...')
 					call s:updateAttribute(makeLine, 'make', newMake)
-					call s:message('Update done for make with ''' . newMake . ''' on ''' . path . '''.')
+					call s:message('Make updated with ''' . newMake . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
 				call s:error(v:exception)
@@ -1647,8 +1716,9 @@ elseif !exists('myprojects_enable')
 				if newErrorFormat == currentErrorFormat
 					call s:echo('Errorformat not updated for ''' . path . '''.')
 				else
+					call s:echo('Update errorFormat with ''' . newErrorFormat . ''' on ''' . path . '''...')
 					call s:updateAttribute(errorFormatLine, 'errorformat', newErrorFormat)
-					call s:message('Update done for errorformat with ''' . newErrorFormat . ''' on ''' . path . '''.')
+					call s:message('ErrorFormat updated with ''' . newErrorFormat . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
 				call s:error(v:exception)
@@ -1658,8 +1728,12 @@ elseif !exists('myprojects_enable')
 
 
 	" Function s:updateRefresh() {{{2
-	function s:updateRefresh(line)
-		call s:updateAttribute(a:line, 'refresh', localtime())
+	function s:updateRefresh(line, timestamp)
+		let path = s:getPath(a:line)
+
+		if path != '' && getftype(path) == 'dir'
+			call s:updateAttribute(a:line, 'refresh', a:timestamp)
+		endif
 	endfunction
 
 	" Function s:system() {{{2
@@ -2122,7 +2196,7 @@ elseif !exists('myprojects_enable')
 			let path = fnamemodify(bufname('%'), ':p')
 
 			try
-				call s:message('Do conflicts resolution on ''' . path . '''.')
+				call s:echo('Resolve conflicts on ''' . path . '''...')
 				call s:svn('resolved --non-interactive ' . shellescape(path))
 				call s:message('Conflicts resolved on ''' . path . '''.')
 				call s:refreshSvnConflictWindow(a:path)
@@ -2400,6 +2474,18 @@ elseif !exists('myprojects_enable')
 				let attributes['mappings'] = mappings
 			endif
 
+			let make = s:extractMakeFromLine(a:line)
+
+			if !empty(make)
+				let attributes['make'] = make
+			endif
+
+			let errorFormat = s:extractErrorFormatFromLine(a:line)
+
+			if !empty(errorFormat)
+				let attributes['errorformat'] = errorFormat
+			endif
+
 			if !empty(attributes)
 				let myprojects[name]['attributes'] = attributes
 			endif
@@ -2437,9 +2523,9 @@ elseif !exists('myprojects_enable')
 		let filter = a:filter
 
 		for [name, meta] in items(a:myprojects)
-			let path = s:unescape(!has_key(meta, 'attributes') || !has_key(meta['attributes'], 'path') ? a:path . s:osSlash . name : meta['attributes']['path'])
+			let path = resolve(s:unescape(!has_key(meta, 'attributes') || !has_key(meta['attributes'], 'path') ? a:path . s:osSlash . name : meta['attributes']['path']))
 
-			if s:pathExists(path) && (filter == '' || match(name, filter) != -1)
+			if s:pathExists(path) && (getftype(path) == 'dir' || filter == '' || match(name, filter) != -1)
 				let myprojects .= repeat("\t", a:indent) . s:escape(name)
 
 				if has_key(meta, 'attributes')
@@ -2565,9 +2651,16 @@ elseif !exists('myprojects_enable')
 
 		if line == 0
 			wincmd p
-			call s:error('Unable to find ''' . path . ''' in ' . s:plugin . '.')
 		else
 			call s:edit(a:command, line)
+		endif
+	endfunction
+
+	" Function s:loadMyProjectsAttributes() {{{2
+	function s:loadMyProjectsAttributes()
+		if s:loadAttributes == 1 && !exists('b:myprojectsAttributesLoaded')
+			call s:openFromMyProjectsWindow('edit', fnamemodify(bufname('%'), ':p'))
+			let b:myprojectsAttributesLoaded = 1
 		endif
 	endfunction
 
