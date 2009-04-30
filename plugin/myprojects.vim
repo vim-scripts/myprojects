@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Thu Apr 30 09:28:37 CEST 2009
+" Date:						Thu Apr 30 10:37:29 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.90'
+	let s:version = '0.0.91'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -151,14 +151,14 @@ elseif !exists('myprojects_enable')
 			let mappings = {'1': '', '2': '', '3': '', '4': '', '5': '', '6': '', '7': '', '8': '', '9': '', '10': '', '11': '', '12': ''}
 
 			if !has_key(s:preferences, type)
-				let s:preferences[type] = {'path': '', 'cd': '', 'filter': '', 'make': '', 'errorFormat': '', 'mappings': mappings}
+				let s:preferences[type] = {'path': '', 'cd': '', 'filter': '', 'make': '', 'errorFormat': '', 'test': '', 'mappings': mappings}
 			else
 				let s:preferences[type]['path'] = !has_key(s:preferences[type], 'path') ? '': s:preferences[type]['path']
 				let s:preferences[type]['cd'] = !has_key(s:preferences[type], 'cd') ? '': s:preferences[type]['cd']
 				let s:preferences[type]['filter'] = !has_key(s:preferences[type], 'filter') ? '': s:preferences[type]['filter']
 				let s:preferences[type]['make'] = !has_key(s:preferences[type], 'make') ? '': s:preferences[type]['make']
 				let s:preferences[type]['errorFormat'] = !has_key(s:preferences[type], 'errorFormat') ? '': s:preferences[type]['errorFormat']
-
+				let s:preferences[type]['test'] = !has_key(s:preferences[type], 'test') ? '': s:preferences[type]['test']
 
 				if has_key(s:preferences[type], 'mappings')
 					for [key, mapping] in items(s:preferences[type]['mappings'])
@@ -172,6 +172,7 @@ elseif !exists('myprojects_enable')
 			let s:preferences[type]['filter'] = s:inputFilter('Filter for type ''' . type . ''': ', s:preferences[type]['filter'])
 			let s:preferences[type]['make'] = s:inputMake('Make for type ''' . type . ''': ', s:preferences[type]['make'])
 			let s:preferences[type]['errorformat'] = s:inputErrorFormat('Error format for type ''' . type . ''': ', s:preferences[type]['errorFormat'])
+			let s:preferences[type]['test'] = s:inputTest('Test extension for type ''' . type . ''': ', s:preferences[type]['test'])
 			let s:preferences[type]['mappings'] = {'1': '', '2': '', '3': '', '4': '', '5': '', '6': '', '7': '', '8': '', '9': '', '10': '', '11': '', '12': ''}
 
 			let mappings = s:inputMappings('Mappings for type ''' . type . ''': ', mappings)
@@ -1065,7 +1066,7 @@ elseif !exists('myprojects_enable')
 				let myprojects[name]['attributes']['make'] = s:inputMake('Make of project ''' . name . ''': ', attributes['make'])
 				let myprojects[name]['attributes']['errorformat'] = s:inputErrorFormat('Error format of project ''' . name . ''': ', attributes['errorFormat'])
 				let myprojects[name]['attributes']['mappings'] = s:inputMappings('Mappings of project ''' . name . ''': ', attributes['mappings'])
-				let myprojects[name]['attributes']['test'] = s:inputTest('Test of project ''' . name . ''': ', attributes['test'])
+				let myprojects[name]['attributes']['test'] = s:inputTest('Test extension of project ''' . name . ''': ', attributes['test'])
 
 				call s:echo('Create project ''' . name . ''' from path ''' . myprojects[name]['attributes']['path'] . '''...')
 				call s:put(s:buildMyProjects('', filter, myprojects, '', indent), a:line)
@@ -1355,7 +1356,18 @@ elseif !exists('myprojects_enable')
 		endif
 
 		if test != ''
-			silent execute 'nnoremap <silent> <buffer> <LocalLeader>et :call <SID>openTest(''split'', fnamemodify(bufname(''%''), '':p''), fnamemodify(bufname(''%''), '':t:r'') . ''' . test . ''')<CR>'
+			let path = fnamemodify(bufname('%'), ':t')
+
+			let rootPath = fnamemodify(path, ':r')
+
+			while rootPath != path
+				let path = rootPath
+				let rootPath = fnamemodify(path, ':r')
+			endwhile
+
+			echomsg path
+
+			silent execute 'nnoremap <silent> <buffer> <LocalLeader>et :call <SID>openTest(''split'', fnamemodify(bufname(''%''), '':p''), ''' . path . test . ''')<CR>'
 		endif
 
 		setlocal more
