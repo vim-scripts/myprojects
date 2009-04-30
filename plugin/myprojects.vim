@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Thu Apr 30 10:37:29 CEST 2009
+" Date:						Thu Apr 30 11:05:02 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.91'
+	let s:version = '0.0.92'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -1356,18 +1356,15 @@ elseif !exists('myprojects_enable')
 		endif
 
 		if test != ''
-			let path = fnamemodify(bufname('%'), ':t')
+			let tail = fnamemodify(path, ':t')
+			let rootTail = fnamemodify(tail, ':r')
 
-			let rootPath = fnamemodify(path, ':r')
-
-			while rootPath != path
-				let path = rootPath
-				let rootPath = fnamemodify(path, ':r')
+			while rootTail != tail
+				let tail = rootTail
+				let rootTail = fnamemodify(tail, ':r')
 			endwhile
 
-			echomsg path
-
-			silent execute 'nnoremap <silent> <buffer> <LocalLeader>et :call <SID>openTest(''split'', fnamemodify(bufname(''%''), '':p''), ''' . path . test . ''')<CR>'
+			silent execute 'nnoremap <silent> <buffer> <LocalLeader>et :call <SID>openTest(''split'', ''' . path . ''', ''' . tail . test . ''')<CR>'
 		endif
 
 		setlocal more
@@ -2838,7 +2835,7 @@ elseif !exists('myprojects_enable')
 			let lastProjectLine = s:getLastFolderLine(firstProjectLine)
 			let oldPosition = s:setCursorPosition([0, firstProjectLine, 1])
 
-			let line = search(a:test, 'W', lastProjectLine)
+			let line = search('\%(^\t*\|\/\)' . a:test . '\%(\s\|=\|$\)', 'W', lastProjectLine)
 
 			if line > 0
 				try
@@ -3141,15 +3138,15 @@ elseif !exists('myprojects_enable')
 		if file != ''
 			let oldPosition = s:setCursorPosition([0, line, 1])
 
-			let line = search(file, 'W')
+			let line = search('\%(^\t*\|\/\)' . file . '\%(\s\|=\|$\)', 'W')
 
 			while line > 0
 				let path = s:getPath(line)
 
-				if path != '' && a:path == path
+				if a:path == path
 					return line
 				else
-					let line = search(file, 'W')
+					let line = search('\%(^\t*\|\/\)' . file . '\%(\s\|=\|$\)', 'W')
 				endif
 			endwhile
 
