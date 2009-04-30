@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Wed Apr 29 10:13:05 CEST 2009
+" Date:						Thu Apr 30 09:28:37 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.88'
+	let s:version = '0.0.90'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -215,7 +215,7 @@ elseif !exists('myprojects_enable')
 				nnoremap <silent> <buffer> <C-Left> :call <SID>setWindowWidth(winwidth(0) - g:myprojects_resize_step)<CR>
 				nnoremap <silent> <buffer> <C-h> :call <SID>setWindowWidth(winwidth(0) - g:myprojects_resize_step)<CR>
 				nnoremap <silent> <buffer> <C-Space> :call <SID>toggleFullscreen()<CR>
-				nnoremap <silent> <buffer> <LocalLeader>b :call <SID>getProjectBuffers(line('.'))<CR>
+				nnoremap <silent> <buffer> <LocalLeader>b :call <SID>displayProjectBuffers(<SID>getProjectName(line('.')), <SID>getProjectPath(line('.')), '')<CR>
 				nnoremap <silent> <buffer> <LocalLeader>c :call <SID>create(line('.'))<CR>
 				nnoremap <silent> <buffer> <LocalLeader>r :call <SID>refresh(line('.'), 0)<CR>
 				nnoremap <silent> <buffer> <LocalLeader>R :call <SID>refresh(line('.'), 1)<CR>
@@ -404,61 +404,78 @@ elseif !exists('myprojects_enable')
 
 	" Function s:createMyProjectsWindow() {{{2
 	function s:createMyProjectsWindow(title, buffer, filetype)
-		let buffer = s:sid . a:buffer
+		let buffer = bufnr(s:sid . a:buffer)
 
-		let bufferNumber = bufnr('^' . buffer . '$')
+		if buffer == -1
+			silent execute 'botright new ' . s:sid . a:buffer
 
-		if bufferNumber == -1
-			silent execute 'botright new ' . buffer
-			call s:setWindowHeight(0)
-		else
-			let bufferWindow = bufwinnr(bufferNumber)
+			setlocal buftype=nofile
+			setlocal nobuflisted
+			setlocal nocursorcolumn
+			setlocal noexpandtab
+			setlocal nolist
+			setlocal nomodeline
+			setlocal nonumber
+			setlocal noruler
+			setlocal nospell
+			setlocal noswapfile
+			setlocal nowrap
 
-			if bufferWindow == -1
-				silent execute 'botright new ' . buffer
-				call s:setWindowHeight(0)
+			call s:setLocal('cursorline', g:myprojects_cursorline)
+
+			let &titlestring = s:prompt . a:title
+
+			silent execute 'setlocal filetype=' . a:filetype
+			silent execute 'setlocal statusline=' . escape(&titlestring, ' ') . '%=[%3p%%]'
+
+			silent execute 'augroup ' . s:plugin
+
+			if g:myprojects_cursorline
+				silent au! WinEnter <buffer> set cursorline nocursorcolumn
 			else
-				silent execute bufferWindow . 'wincmd w'
+				silent au! WinEnter <buffer> set nocursorline nocursorcolumn
+			endif
+
+			silent execute 'au! BufEnter <buffer> let &titlestring = ''' . substitute(s:prompt . a:title, "'", "''", 'g') . ''''
+			silent augroup END
+
+			if has('syntax') && g:myprojects_syntax
+				syntax on
+			endif
+
+			abclear <buffer>
+		else
+			let window = bufwinnr(buffer)
+
+			if window != -1
+				silent execute window . 'wincmd w'
+			else
+				silent execute 'botright new ' . s:sid . a:buffer
+
+				setlocal buftype=nofile
+				setlocal nobuflisted
+				setlocal nocursorcolumn
+				setlocal noexpandtab
+				setlocal nolist
+				setlocal nomodeline
+				setlocal nonumber
+				setlocal noruler
+				setlocal nospell
+				setlocal noswapfile
+				setlocal nowrap
+
+				call s:setLocal('cursorline', g:myprojects_cursorline)
+
+				let &titlestring = s:prompt . a:title
+
+				silent execute 'setlocal filetype=' . a:filetype
+				silent execute 'setlocal statusline=' . escape(&titlestring, ' ') . '%=[%3p%%]'
 			endif
 		endif
 
-		setlocal buftype=nofile
-		setlocal nobuflisted
-		setlocal nocursorcolumn
-		setlocal noexpandtab
-		setlocal nolist
-		setlocal nomodeline
-		setlocal nonumber
-		setlocal noruler
-		setlocal nospell
-		setlocal noswapfile
-		setlocal nowrap
+		call s:setWindowHeight(0)
 
-		call s:setLocal('cursorline', g:myprojects_cursorline)
-
-		let &titlestring = s:prompt . a:title
-
-		silent execute 'setlocal filetype=' . a:filetype
-		silent execute 'setlocal statusline=' . escape(&titlestring, ' ') . '%=[%3p%%]'
-
-		silent execute 'augroup ' . s:plugin
-
-		if g:myprojects_cursorline
-			silent au! WinEnter <buffer> set cursorline nocursorcolumn
-		else
-			silent au! WinEnter <buffer> set nocursorline nocursorcolumn
-		endif
-
-		silent execute 'au! BufEnter <buffer> let &titlestring = ''' . substitute(s:prompt . a:title, "'", "''", 'g') . ''''
-		silent augroup END
-
-		if has('syntax') && g:myprojects_syntax
-			syntax on
-		endif
-
-		abclear <buffer>
-
-		return bufferNumber == -1
+		return buffer == -1
 	endfunction
 
 	" Function s:createSvnWindow() {{{2
@@ -498,18 +515,20 @@ elseif !exists('myprojects_enable')
 
 	" Function s:createBufferWindow() {{{2
 	function s:createBufferWindow(title, buffer, path)
-		let windowCreated = s:createMyProjectsWindow(a:title, a:buffer, s:plugin)
+		let bufferCreated = s:createMyProjectsWindow(a:title, a:buffer, s:plugin)
 
-		nnoremap <buffer> <silent> <S-LeftMouse> <LeftMouse>
-		silent execute 'noremap <buffer> <silent> <Return> :call <SID>openFromBuffersWindow(''edit'', ''' . a:path . ''')<CR>'
-		silent execute 'noremap <buffer> <silent> <2-Leftmouse> :call <SID>openFromBuffersWindow(''edit'', ''' . a:path . ''')<CR>'
-		silent execute 'noremap <buffer> <silent> <S-Return> :call <SID>openFromBuffersWindow(''sp'', ''' . a:path . ''')<CR>'
-		silent execute 'noremap <buffer> <silent> <S-2-Leftmouse> :call <SID>openFromBuffersWindow(''sp'', ''' . a:path . ''')<CR>'
-		silent execute 'noremap <buffer> <silent> <C-Return> :call <SID>openFromBuffersWindow(''vs'', ''' . a:path . ''')<CR>'
-		silent execute 'noremap <buffer> <silent> <C-2-Leftmouse> :call <SID>openFromBuffersWindow(''vs'', ''' . a:path . ''')<CR>'
-		silent execute 'noremap <buffer> <silent> <LocalLeader>sd :call <SID>svnDiffFromBuffersWindow(''' . a:path . ''')<CR>'
+		if bufferCreated
+			nnoremap <buffer> <silent> <S-LeftMouse> <LeftMouse>
+			silent execute 'noremap <buffer> <silent> <Return> :call <SID>openFromBuffersWindow(''edit'', ''' . a:path . ''')<CR>'
+			silent execute 'noremap <buffer> <silent> <2-Leftmouse> :call <SID>openFromBuffersWindow(''edit'', ''' . a:path . ''')<CR>'
+			silent execute 'noremap <buffer> <silent> <S-Return> :call <SID>openFromBuffersWindow(''sp'', ''' . a:path . ''')<CR>'
+			silent execute 'noremap <buffer> <silent> <S-2-Leftmouse> :call <SID>openFromBuffersWindow(''sp'', ''' . a:path . ''')<CR>'
+			silent execute 'noremap <buffer> <silent> <C-Return> :call <SID>openFromBuffersWindow(''vs'', ''' . a:path . ''')<CR>'
+			silent execute 'noremap <buffer> <silent> <C-2-Leftmouse> :call <SID>openFromBuffersWindow(''vs'', ''' . a:path . ''')<CR>'
+			silent execute 'noremap <buffer> <silent> <LocalLeader>sd :call <SID>svnDiffFromBuffersWindow(''' . a:path . ''')<CR>'
+		endif
 
-		return windowCreated
+		return bufferCreated
 	endfunction
 
 
@@ -1267,7 +1286,7 @@ elseif !exists('myprojects_enable')
 			silent execute window . 'wincmd w'
 			silent execute 'buffer ' . path
 		else
-			call  s:goToAnEditionWindow()
+			call s:goToAnEditionWindow()
 
 			let command =  a:command . ' ' . fnameescape(path)
 
@@ -2377,8 +2396,10 @@ elseif !exists('myprojects_enable')
 		return buffers
 	endfunction
 
-	" Function s:displayProjectBuffers() {{{2
-	function s:displayProjectBuffers(projectName, path, delete)
+	" Function s:getProjectBuffers() {{{2
+	function s:getProjectBuffers(project, path, delete)
+		let projectBuffers = []
+
 		if a:path != ''
 			silent let buffers = filter(s:getBuffers(0), 'v:val =~ ''^' . a:path . s:osSlash . '.*$''')
 
@@ -2393,29 +2414,38 @@ elseif !exists('myprojects_enable')
 			endif
 
 			call map(projectBuffers, 'substitute(v:val, ''^' . a:path . ''', '''', '''')')
+		endif
 
-			if s:createBufferWindow('Buffers of project ''' . a:projectName . ''' in ''' . a:path . '''', a:projectName, a:path)
+		return projectBuffers
+	endfunction
+
+	" Function s:displayProjectBuffers() {{{2
+	function s:displayProjectBuffers(project, path, delete)
+		if a:path != ''
+			if s:createBufferWindow('Buffers of project ''' . a:project . ''' in ''' . a:path . '''', a:project, a:path)
 				silent execute 'nnoremap <buffer> <silent> d :call <SID>deleteProjectBuffers(line(''.''), ''' . a:path .''')<CR>'
-				silent execute 'augroup ' . s:plugin
-				silent execute 'au! BufNew * call' . s:sid . 'refreshProjectBuffers(''' . a:projectName . ''', ''' . a:path . ''', '''')'
-				silent execute 'au! BufDelete * execute "call ' . s:sid . 'refreshProjectBuffers(''' . a:projectName . ''', ''' . a:path . ''', " . expand(''<abuf>'') . ")"'
-				silent augroup END
+				silent execute 'au! ' . s:plugin . ' BufWinLeave <buffer> au! ' . s:plugin . ' BufNew,BufDelete ' . a:path . '/*'
 			endif
 
-			call s:putInMyProjectsWindow(projectBuffers)
+			silent execute 'augroup ' . s:plugin
+			silent execute 'au! BufNew ' . a:path . '/* call' . s:sid . 'refreshProjectBuffers(''' . a:project . ''', ''' . a:path . ''', '''')'
+			silent execute 'au! BufDelete ' . a:path . '/* execute "call ' . s:sid . 'refreshProjectBuffers(''' . a:project . ''', ''' . a:path . ''', " . expand(''<abuf>'') . ")"'
+			silent augroup END
+
+			call s:putInMyProjectsWindow(s:getProjectBuffers(a:project, a:path, a:delete))
 		endif
 	endfunction
 
-	" Function s:getProjectBuffers() {{{2
-	function s:getProjectBuffers(line)
-		call s:displayProjectBuffers(s:getProjectName(a:line), s:getProjectPath(a:line), '')
-	endfunction
-
 	" Function s:refreshProjectBuffers() {{{2
-	function s:refreshProjectBuffers(projectName, path, delete)
+	function s:refreshProjectBuffers(project, path, delete)
 		if s:refreshProjectBuffers
-			call s:displayProjectBuffers(a:projectName, a:path, a:delete)
-			wincmd p
+			let window = bufwinnr(s:sid . a:project)
+
+			if window != -1
+				silent execute window . 'wincmd w'
+				call s:putInMyProjectsWindow(s:getProjectBuffers(a:project, a:path, a:delete))
+				wincmd p
+			endif
 		endif
 	endfunction
 
