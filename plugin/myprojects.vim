@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Thu Apr 30 11:05:02 CEST 2009
+" Date:						Thu Apr 30 12:14:05 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.92'
+	let s:version = '0.0.93'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -2814,7 +2814,6 @@ elseif !exists('myprojects_enable')
 	" Function s:openFromMyProjectsWindow() {{{2
 	function s:openFromMyProjectsWindow(command, path)
 		let path = resolve(substitute(a:path, '^[[:space:]A-Z]\+\s', '', ''))
-
 		let line = s:getLineOfPath(path)
 
 		if line == 0
@@ -2837,15 +2836,52 @@ elseif !exists('myprojects_enable')
 
 			let line = search('\%(^\t*\|\/\)' . a:test . '\%(\s\|=\|$\)', 'W', lastProjectLine)
 
-			if line > 0
-				try
-					call s:edit(a:command, line)
-				catch /.*/
-					call s:error(v:exception)
-				endtry
-			endif
+			let lines = {}
+
+			while line > 0
+				let lines[line] = s:getPath(line)
+				let line = search('\%(^\t*\|\/\)' . a:test . '\%(\s\|=\|$\)', 'W', lastProjectLine)
+			endwhile
 
 			call s:setCursorPosition(oldPosition)
+
+			let linesLength = len(lines)
+
+			if len(linesLength) <= 0
+				call s:error('No test file ''' . a:test . ''' found for ''' . a:path . ''')
+			else
+				let line = 0
+
+				if linesLength == 1
+					let line = get(keys(lines), 0)
+				else
+					let list = ['There is several test file ''' . a:test . ''' found for ''' . a:path . ''':']
+					let keys = {}
+
+					let index = 1
+
+					for [line, path] in items(lines)
+						let list = add(list, index . '. ' . path)
+						let keys[index] = line
+						let index += 1
+					endfor
+
+					let index = inputlist(list)
+
+					if has_key(keys, index)
+						let line = keys[index]
+					endif
+				endif
+
+				if line > 0
+					try
+						call s:edit(a:command, line)
+					catch /.*/
+						call s:error(v:exception)
+					endtry
+				endif
+			endif
+
 		endif
 	endfunction
 
@@ -3136,7 +3172,7 @@ elseif !exists('myprojects_enable')
 		let file = fnamemodify(a:path, ':t')
 
 		if file != ''
-			let oldPosition = s:setCursorPosition([0, line, 1])
+			let oldPosition = s:setCursorPosition([0, a:line, 1])
 
 			let line = search('\%(^\t*\|\/\)' . file . '\%(\s\|=\|$\)', 'W')
 
@@ -3144,15 +3180,16 @@ elseif !exists('myprojects_enable')
 				let path = s:getPath(line)
 
 				if a:path == path
+					call s:setCursorPosition(oldPosition)
 					return line
 				else
 					let line = search('\%(^\t*\|\/\)' . file . '\%(\s\|=\|$\)', 'W')
 				endif
 			endwhile
 
-			call s:setCursorPosition(oldPosition)
 		endif
 
+		call s:setCursorPosition(oldPosition)
 		return line
 	endfunction
 
