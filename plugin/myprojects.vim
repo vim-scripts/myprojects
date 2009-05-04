@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Mon May  4 08:54:58 CEST 2009
+" Date:						Mon May  4 12:21:56 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.94'
+	let s:version = '0.0.95'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -256,6 +256,7 @@ elseif !exists('myprojects_enable')
 				nnoremap <silent> <buffer> <LocalLeader>si :call <SID>svnInfo(line('.'))<CR>
 				nnoremap <silent> <buffer> <LocalLeader>sC :call <SID>svnCheckout(line('.'))<CR>
 				nnoremap <silent> <buffer> <LocalLeader>src :call <SID>svnResolve(line('.'))<CR>
+				nnoremap <silent> <buffer> <LocalLeader>sl :call <SID>svnLog(line('.'))<CR>
 				nnoremap <silent> <buffer> <LocalLeader>df :call <SID>definePreferences()<CR>
 
 				if g:myprojects_display_path_in_statusline
@@ -351,6 +352,7 @@ elseif !exists('myprojects_enable')
 	function s:closeMyProjectsWindow()
 		if s:goToMyProjectsWindow()
 			hide
+			echo
 		endif
 	endfunction
 
@@ -2302,6 +2304,39 @@ elseif !exists('myprojects_enable')
 		endif
 	endfunction
 
+	" Function s:svnLog() {{{2
+	function s:svnLog(line)
+		let path = s:getPath(a:line)
+
+		if path != ''
+			let path = resolve(path)
+
+			if getftype(path) == ''
+				call s:error('Unable to get log file of ''' . path . ''' because it is not a file or a directory.')
+			else
+				try
+					let projectPath = s:getProjectPath(a:line)
+
+					call s:createSvnWindow('Svn log of ''' . path . '''')
+					call s:echo('Do svn log on ''' . path . '''...')
+
+					let log = map(split(substitute(substitute(s:svn('log -v ' . shellescape(path)), '\n\n\+\(-\{72}\)', '\n\1', 'g'), '[[:space:]ACDIMRX?!~][[:space:]CM][[:space:]L][[:space:]+][[:space:]SX][[:space:]K].\{-}\(-\{72}\)\@=', '\n', 'g'), "\n"), 'substitute(v:val, "\\\\$", "", "")')
+
+					let info = s:svn('info ' . shellescape(path))
+					let root = substitute(info, '^.*Repository\sRoot:\s\([^\n]\{-}\)\n.*$', '\1', '')
+					let url = substitute(info, '^.*URL:\s\([^\n]\{-}\)\n.*$', '\1', '')
+
+					let log = map(log, 'substitute(v:val, "^\\s\\{3}\\([ACDIMRX]\\s\\)' . substitute(url, '^' . root, '', '') . '\\(.\\+\\)$", "\\1      " . projectPath . "\\2", "")')
+
+					call s:putInMyProjectsWindow(log)
+					call s:message('Svn log done on path ''' . path . '''.')
+				catch /.*/
+					call s:svnError('Svn status failed on ''' . path . ''' :', v:exception)
+				endtry
+			endif
+		endif
+	endfunction
+
 	" Function s:refreshSvnConflictWindow() {{{2
 	function s:refreshSvnConflictWindow(path)
 		try
@@ -2813,12 +2848,11 @@ elseif !exists('myprojects_enable')
 
 	" Function s:openFromMyProjectsWindow() {{{2
 	function s:openFromMyProjectsWindow(command, path)
-		let path = resolve(substitute(a:path, '^[[:space:]A-Z]\+\s', '', ''))
+		let path = resolve(a:path)
+
 		let line = s:getLineOfPath(path)
 
-		if line == 0
-			wincmd p
-		else
+		if line > 0
 			call s:edit(a:command, line)
 		endif
 	endfunction
@@ -2908,7 +2942,7 @@ elseif !exists('myprojects_enable')
 	" Function s:openFromSvnWindow() {{{2
 	function s:openFromSvnWindow(command)
 		try
-			call s:openFromMyProjectsWindow(a:command, getline('.'))
+			call s:openFromMyProjectsWindow(a:command, substitute(getline('.'), '^[[:space:]ACDIMRX?!~][[:space:]CM][[:space:]L][[:space:]+][[:space:]SX][[:space:]K][[:space:]C]\s', '', ''))
 		catch /.*/
 			call s:error(v:exception)
 		endtry
