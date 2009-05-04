@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Mon May  4 12:21:56 CEST 2009
+" Date:						Mon May  4 15:28:38 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.95'
+	let s:version = '0.0.96'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -2315,7 +2315,7 @@ elseif !exists('myprojects_enable')
 				call s:error('Unable to get log file of ''' . path . ''' because it is not a file or a directory.')
 			else
 				try
-					let projectPath = s:getProjectPath(a:line)
+					let path = s:getPath(a:line)
 
 					call s:createSvnWindow('Svn log of ''' . path . '''')
 					call s:echo('Do svn log on ''' . path . '''...')
@@ -2325,8 +2325,12 @@ elseif !exists('myprojects_enable')
 					let info = s:svn('info ' . shellescape(path))
 					let root = substitute(info, '^.*Repository\sRoot:\s\([^\n]\{-}\)\n.*$', '\1', '')
 					let url = substitute(info, '^.*URL:\s\([^\n]\{-}\)\n.*$', '\1', '')
+					let delta = substitute(url, '^' . root, '', '')
 
-					let log = map(log, 'substitute(v:val, "^\\s\\{3}\\([ACDIMRX]\\s\\)' . substitute(url, '^' . root, '', '') . '\\(.\\+\\)$", "\\1      " . projectPath . "\\2", "")')
+					echomsg delta
+
+					let log = map(log, 'substitute(v:val, "^\\s\\+\\([ACDIMRX]\\s\\)' . substitute(url, '^' . root, '', '') . '\\(.\\+\\)$", "\\1      " . path . "\\2", "")')
+					let log = filter(log, 'v:val !~ ''^\s\+[ASDIMRX]''')
 
 					call s:putInMyProjectsWindow(log)
 					call s:message('Svn log done on path ''' . path . '''.')
