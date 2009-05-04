@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Thu Apr 30 12:14:05 CEST 2009
+" Date:						Mon May  4 08:54:58 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.93'
+	let s:version = '0.0.94'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -1032,7 +1032,7 @@ elseif !exists('myprojects_enable')
 		if indent >= 0
 			try
 				let myprojects = {}
-				let attributes = {'path': '', 'filter': '', 'make': '', 'errorFormat': '', 'mappings': {}}
+				let attributes = {'path': '', 'filter': '', 'make': '', 'errorFormat': '', 'mappings': {}, 'test': ''}
 
 				call s:readMyProjectsPreferences()
 
