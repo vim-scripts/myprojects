@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Wed May  6 11:09:21 CEST 2009
+" Date:						Wed May  6 15:25:33 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.98'
+	let s:version = '0.0.99'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -597,14 +597,14 @@ elseif !exists('myprojects_enable')
 
 	" Function s:foldexpr() {{{2
 	function s:foldexpr()
-		let currentIndent = s:indent(v:lnum)
-		let nextIndent = s:indent(nextnonblank(v:lnum + 1))
-		return currentIndent >= nextIndent ? currentIndent : '>' . nextIndent
+		let currentIndent = indent(v:lnum)
+		let nextIndent = indent(nextnonblank(v:lnum + 1))
+		return currentIndent >= nextIndent ? currentIndent / &tabstop : '>' . nextIndent / &tabstop
 	endfunction
 
 	" Function s:isFolder() {{{2
 	function s:isFolder(line)
-		return s:indent(a:line) < s:indent(nextnonblank(a:line + 1))
+		return indent(a:line) < indent(nextnonblank(a:line + 1))
 	endfunction
 
 	" Function s:getFirstFolderLine() {{{2
@@ -3033,13 +3033,7 @@ elseif !exists('myprojects_enable')
 	endfunction
 	" Function s:indent() {{{2
 	function s:indent(line)
-		let indent = indent(a:line)
-
-		if indent > 0
-			let indent = indent / &tabstop
-		endif
-
-		return indent
+		return indent(a:line) / &tabstop
 	endfunction
 
 	" Function s:put() {{{2
