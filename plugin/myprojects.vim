@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Mon May  4 15:28:38 CEST 2009
+" Date:						Tue May  5 14:08:01 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.96'
+	let s:version = '0.0.97'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -70,6 +70,7 @@ elseif !exists('myprojects_enable')
 	call s:initVariable('g:myprojects_sort_svn', 1)
 	call s:initVariable('g:myprojects_sort_buffers', 1)
 	call s:initVariable('g:myprojects_quit_vim_if_alone', 1)
+	call s:initVariable('g:myprojects_autowrite', 1)
 
 	" Initialize command {{{2
 	command -nargs=? -complete=file MyProjectsToggle call <SID>toggleMyProjectsWindow()
@@ -1121,6 +1122,10 @@ elseif !exists('myprojects_enable')
 
 				endif
 
+				if g:myprojects_autowrite
+					write
+				endif
+
 				call s:echo('Refresh done for ''' . path . '''.')
 			endif
 		endif
@@ -1990,9 +1995,7 @@ elseif !exists('myprojects_enable')
 
 		call filter(files, 'strpart(v:val, 0, 6) =~# "[MDAR]"')
 
-		if empty(files)
-			bwipeout
-		else
+		if !empty(files)
 			let b:files = copy(files)
 
 			call insert(files, '')
@@ -2013,7 +2016,7 @@ elseif !exists('myprojects_enable')
 		let files = b:files
 		let message = filter(getbufline('%', 1, '$'), "v:val !~# '^" . escape(s:prompt, '[]') . "'")
 
-		bwipeout
+		silent! execute 'bwipeout ' . s:sid . 'svn'
 
 		call map(files, "substitute(v:val, '^[^\\s]\\+\\s', '', '')")
 
@@ -2053,7 +2056,7 @@ elseif !exists('myprojects_enable')
 
 		let files = filter(getbufline('%', 1, '$'), 'strpart(v:val, 0, 6) =~# ''\%(M\|D\|R\|C\)''')
 
-		bwipeout
+		silent! execute 'bwipeout ' . s:sid . 'svn'
 
 		if !empty(files)
 			call map(files, "substitute(v:val, '^[^\\s]\\+\\s', '', '')")
@@ -2095,7 +2098,7 @@ elseif !exists('myprojects_enable')
 
 		let files = getbufline('%', 1, '$')
 
-		bwipeout
+		silent! execute 'bwipeout ' . s:sid . 'svn'
 
 		call filter(files, "v:val =~ '^?'")
 
