@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Tue May  5 14:08:01 CEST 2009
+" Date:						Wed May  6 11:09:21 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.97'
+	let s:version = '0.0.98'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -259,6 +259,7 @@ elseif !exists('myprojects_enable')
 				nnoremap <silent> <buffer> <LocalLeader>src :call <SID>svnResolve(line('.'))<CR>
 				nnoremap <silent> <buffer> <LocalLeader>sl :call <SID>svnLog(line('.'))<CR>
 				nnoremap <silent> <buffer> <LocalLeader>df :call <SID>definePreferences()<CR>
+				nnoremap <silent> <buffer> <LocalLeader>xx :call <SID>openMyProjectsWindow()<CR>
 
 				if g:myprojects_display_path_in_statusline
 					nnoremap <silent> <buffer> <Down> <Down>:call <SID>echoPath()<CR>
@@ -760,25 +761,17 @@ elseif !exists('myprojects_enable')
 	function s:extractCdFromLine(line, resolveDot)
 		let cd = s:extractAttributeFromLine('cd', a:line)
 
-		if cd == '.' && a:resolveDot
-			let cd = s:getPath(a:line)
-		endif
-
-		return cd
+		return cd != '.' || !a:resolveDot ? cd : s:getPath(a:line)
 	endfunction
 
 	" Function s:extractCd() {{{2
 	function s:extractCd(line)
+		let cd = ''
 		let line = a:line
 
-		let cd = s:extractCdFromLine(line, 1)
-
-		while cd == '' && line > 0
-			let line = s:getFirstFolderLine(line)
-
-			if line > 0
-				let cd = s:extractCdFromLine(line, 1)
-			endif
+		while line > 0
+			let cd = s:extractCdFromLine(line, 1)
+			let line = cd != '' ? 0 : s:getFirstFolderLine(line)
 		endwhile
 
 		return cd
@@ -2329,9 +2322,6 @@ elseif !exists('myprojects_enable')
 					let root = substitute(info, '^.*Repository\sRoot:\s\([^\n]\{-}\)\n.*$', '\1', '')
 					let url = substitute(info, '^.*URL:\s\([^\n]\{-}\)\n.*$', '\1', '')
 					let delta = substitute(url, '^' . root, '', '')
-
-					echomsg delta
-
 					let log = map(log, 'substitute(v:val, "^\\s\\+\\([ACDIMRX]\\s\\)' . substitute(url, '^' . root, '', '') . '\\(.\\+\\)$", "\\1      " . path . "\\2", "")')
 					let log = filter(log, 'v:val !~ ''^\s\+[ASDIMRX]''')
 
@@ -2843,10 +2833,7 @@ elseif !exists('myprojects_enable')
 		let line = 0
 
 		if getftype(a:path) == 'file'
-			if !s:goToMyProjectsWindow()
-				call s:openMyProjectsWindow()
-			endif
-
+			call s:openMyProjectsWindow()
 			let line = s:searchPath(a:path, 0)
 		endif
 
@@ -2855,11 +2842,11 @@ elseif !exists('myprojects_enable')
 
 	" Function s:openFromMyProjectsWindow() {{{2
 	function s:openFromMyProjectsWindow(command, path)
-		let path = resolve(a:path)
+		let line = s:getLineOfPath(resolve(a:path))
 
-		let line = s:getLineOfPath(path)
-
-		if line > 0
+		if line <= 0
+			wincmd p
+		else
 			call s:edit(a:command, line)
 		endif
 	endfunction
@@ -2868,15 +2855,13 @@ elseif !exists('myprojects_enable')
 	function s:openTest(command, path, test)
 		let line = s:getLineOfPath(a:path)
 
-		if line == 0
+		if line <= 0
 			wincmd p
 		else
 			let firstProjectLine = s:getProjectLine(line)
 			let lastProjectLine = s:getLastFolderLine(firstProjectLine)
 			let oldPosition = s:setCursorPosition([0, firstProjectLine, 1])
-
 			let line = search('\%(^\t*\|\/\)' . a:test . '\%(\s\|=\|$\)', 'W', lastProjectLine)
-
 			let lines = {}
 
 			while line > 0
@@ -2970,7 +2955,9 @@ elseif !exists('myprojects_enable')
 
 		let line = s:getLineOfPath(path)
 
-		if line > 0
+		if line <= 0
+			wincmd p
+		else
 			call s:svnDiff(line)
 		endif
 	endfunction
@@ -3227,7 +3214,6 @@ elseif !exists('myprojects_enable')
 					let line = search('\%(^\t*\|\/\)' . file . '\%(\s\|=\|$\)', 'W')
 				endif
 			endwhile
-
 		endif
 
 		call s:setCursorPosition(oldPosition)
