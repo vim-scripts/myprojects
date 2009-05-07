@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Wed May  6 15:25:33 CEST 2009
+" Date:						Thu May  7 09:04:23 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.99'
+	let s:version = '0.0.100'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -1115,9 +1115,7 @@ elseif !exists('myprojects_enable')
 
 				endif
 
-				if g:myprojects_autowrite
-					write
-				endif
+				call s:autowrite()
 
 				call s:echo('Refresh done for ''' . path . '''.')
 			endif
@@ -1343,7 +1341,7 @@ elseif !exists('myprojects_enable')
 
 		for [line, mapping] in items(mappings)
 			for [key, value] in items(mapping)
-				silent execute 'nnoremap <buffer> <silent> <F' . key . '> ' . expand(value)
+				silent execute 'nnoremap <buffer> <silent> <F' . key . '> ' . escape(expand(value), '|')
 			endfor
 		endfor
 
@@ -1559,6 +1557,7 @@ elseif !exists('myprojects_enable')
 					if newCd != '' && newCd != currentCd
 						call s:echo('Set working directory with ''' . newCd . ''' on ''' . path . '''...')
 						call s:updateAttribute(a:line, 'cd', s:escape(newCd))
+						call s:autowrite()
 						call s:message('Working directory set with ''' . newCd . ''' on ''' . path . '''.')
 					endif
 				catch /.*/
@@ -1601,6 +1600,7 @@ elseif !exists('myprojects_enable')
 					if mapping != ''
 						call s:echo('Set mappings on ''' . path . '''...')
 						call s:updateAttribute(a:line, 'F' . key, mapping)
+						call s:autowrite()
 						call s:message('Mappings set on ''' . path . '''.')
 					endif
 				endfor
@@ -1623,6 +1623,7 @@ elseif !exists('myprojects_enable')
 					if newMake != currentMake
 						call s:echo('Set make with ''' . newMake . ''' on ''' . path . '''...')
 						call s:updateAttribute(a:line, 'make', newMake)
+						call s:autowrite()
 						call s:message('Make set with ''' . newMake . ''' on ''' . path . '''.')
 					endif
 				catch /.*/
@@ -1647,6 +1648,7 @@ elseif !exists('myprojects_enable')
 					if newErrorFormat != currentErrorFormat
 						call s:echo('Set error format with ''' . newErrorFormat . ''' on ''' . path . '''...')
 						call s:updateAttribute(a:line, 'errorformat', newErrorFormat)
+						call s:autowrite()
 						call s:message('Error format set with ''' . newErrorFormat . ''' on ''' . path . '''.')
 					endif
 				catch /.*/
@@ -1671,6 +1673,7 @@ elseif !exists('myprojects_enable')
 					if newTest != currentTest
 						call s:echo('Set test with ''' . newTest . ''' on ''' . path . '''...')
 						call s:updateAttribute(a:line, 'test', newTest)
+						call s:autowrite()
 						call s:message('Test set with ''' . newTest . ''' on ''' . path . '''.')
 					endif
 				catch /.*/
@@ -1735,6 +1738,7 @@ elseif !exists('myprojects_enable')
 				else
 					call s:echo('Update working directory with ''' . newCd . ''' on ''' . path . '''...')
 					call s:updateAttribute(cdLine, 'cd', s:escape(newCd))
+					call s:autowrite()
 					call s:message('Working directory updated with ''' . newCd . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
@@ -1774,6 +1778,7 @@ elseif !exists('myprojects_enable')
 		let currentMappings = s:getNestedMappings(a:line)
 
 		if !empty(currentMappings)
+			let path = s:getPath(filterLine)
 			let lines = {1: '', 2: '', 3: '', 4: '', 5: '', 6: '', 7: '', 8: '', 9: '', 10: '', 11: '', 12: ''}
 			let mappings = {1: '', 2: '', 3: '', 4: '', 5: '', 6: '', 7: '', 8: '', 9: '', 10: '', 11: '', 12: ''}
 
@@ -1782,11 +1787,18 @@ elseif !exists('myprojects_enable')
 				let mappings[key] = value[1]
 			endfor
 
-			for [key, mapping] in items(s:inputMappings('Update mapping: ', mappings))
+			let newMappings = s:inputMappings('Update mapping: ', mappings)
+
+			call s:echo('Update mappings on ''' . path . '''...')
+
+			for [key, mapping] in items(newMappings)
 				if has_key(lines, key)
 					call s:updateAttribute(lines[key], 'F' . key, mapping)
 				endif
 			endfor
+
+			call s:autowrite()
+			call s:message('Mappings updated on ''' . path . '''.')
 		endif
 	endfunction
 
@@ -1806,6 +1818,7 @@ elseif !exists('myprojects_enable')
 				else
 					call s:echo('Update make with ''' . newMake . ''' on ''' . path . '''...')
 					call s:updateAttribute(makeLine, 'make', newMake)
+					call s:autowrite()
 					call s:message('Make updated with ''' . newMake . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
@@ -1830,6 +1843,7 @@ elseif !exists('myprojects_enable')
 				else
 					call s:echo('Update error format with ''' . newErrorFormat . ''' on ''' . path . '''...')
 					call s:updateAttribute(errorFormatLine, 'errorformat', newErrorFormat)
+					call s:autowrite()
 					call s:message('Error format updated with ''' . newErrorFormat . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
@@ -1855,6 +1869,7 @@ elseif !exists('myprojects_enable')
 				else
 					call s:echo('Update test with ''' . newTest . ''' on ''' . path . '''...')
 					call s:updateAttribute(testLine, 'test', newTest)
+					call s:autowrite()
 					call s:message('Test updated with ''' . newTest . ''' on ''' . path . '''.')
 				endif
 			catch /.*/
@@ -2982,6 +2997,13 @@ elseif !exists('myprojects_enable')
 		call s:svnDiffFromMyProjectWindow(a:path . getline('.'))
 
 		let s:refreshProjectBuffers = 1
+	endfunction
+
+	" Function s:autowrite() {{{2
+	function s:autowrite()
+		if g:myprojects_autowrite
+			write
+		endif
 	endfunction
 
 	" Function s:sid() {{{2
