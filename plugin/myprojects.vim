@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Thu May  7 09:04:23 CEST 2009
+" Date:						Wed May 13 09:36:42 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.100'
+	let s:version = '0.0.101'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -507,7 +507,7 @@ elseif !exists('myprojects_enable')
 
 	" Function s:createSvnConflictWindow() {{{2
 	function s:createSvnConflictWindow(title, path)
-		call s:createMyProjectsWindow(a:title, 'svn', s:plugin . 'Svn')
+		call s:createSvnWindow(a:title)
 
 		nnoremap <buffer> <silent> <S-LeftMouse> <LeftMouse>
 		silent execute 'noremap <buffer> <silent> <Return> :call <SID>resolveSvnConflict(''edit'', ''' . a:path . ''')<CR>'
@@ -1013,7 +1013,7 @@ elseif !exists('myprojects_enable')
 
 	" Function s:inputErrorFormat() {{{2
 	function s:inputErrorFormat(message, value)
-		return substitute(s:input(a:message, a:value), '\(\s\)', '\\\1', 'g')
+		return s:input(a:message, a:value)
 	endfunction
 
 	" Function s:inputTest() {{{2
@@ -1169,9 +1169,11 @@ elseif !exists('myprojects_enable')
 
 					try
 						call s:echo('Do grep on ''' . path . ''' with pattern ''' . pattern . '''...')
+						mkview
 						silent execute 'vimgrep /' . escape(pattern, '/') . '/jg ' . files
-						silent cw
+						loadview
 						call s:echo('Grep done on ''' . path . ''' with pattern ''' . pattern . '''.')
+						silent cw
 					catch /E480/
 						call s:error('No match found for grep with ''' . pattern . ''' in ''' . path . '''.')
 					catch
@@ -2939,7 +2941,7 @@ elseif !exists('myprojects_enable')
 	" Function s:resolveSvnConflict() {{{2
 	function s:resolveSvnConflict(command, path)
 		try
-			call s:openFromMyProjectsWindow(a:command, getline('.'))
+			call s:openFromSvnWindow(a:command)
 			execute 'au! ' . s:plugin . ' BufWritePost <buffer> call ' . s:sid . 'svnMarkAsResolved(''' . a:path . ''')'
 		catch /.*/
 			call s:error(v:exception)
@@ -2949,7 +2951,7 @@ elseif !exists('myprojects_enable')
 	" Function s:openFromSvnWindow() {{{2
 	function s:openFromSvnWindow(command)
 		try
-			call s:openFromMyProjectsWindow(a:command, substitute(getline('.'), '^[[:space:]ACDIMRX?!~][[:space:]CM][[:space:]L][[:space:]+][[:space:]SX][[:space:]K][[:space:]C]\s', '', ''))
+			call s:openFromMyProjectsWindow(a:command, substitute(getline('.'), '^[[:space:]ACDIMRX?!~]\?[[:space:]CM]\?[[:space:]L]\?[[:space:]+]\?[[:space:]SX]\?[[:space:]K]\?[[:space:]C]\?\s*', '', ''))
 		catch /.*/
 			call s:error(v:exception)
 		endtry
