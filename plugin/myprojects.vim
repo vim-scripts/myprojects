@@ -1,7 +1,7 @@
 "=============================================================================
 " File:						myprojects.vim
 " Author:					Frédéric Hardy - http://blog.mageekbox.net
-" Date:						Wed May 13 09:36:42 CEST 2009
+" Date:						Fri May 15 11:16:00 CEST 2009
 " Licence:					GPL version 2.0 license
 " GetLatestVimScripts:	2556 10039 :AutoInstall: myprojects.vim
 "=============================================================================
@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.101'
+	let s:version = '0.0.102'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -259,7 +259,6 @@ elseif !exists('myprojects_enable')
 				nnoremap <silent> <buffer> <LocalLeader>src :call <SID>svnResolve(line('.'))<CR>
 				nnoremap <silent> <buffer> <LocalLeader>sl :call <SID>svnLog(line('.'))<CR>
 				nnoremap <silent> <buffer> <LocalLeader>df :call <SID>definePreferences()<CR>
-				nnoremap <silent> <buffer> <LocalLeader>xx :call <SID>openMyProjectsWindow()<CR>
 
 				if g:myprojects_display_path_in_statusline
 					nnoremap <silent> <buffer> <Down> <Down>:call <SID>echoPath()<CR>
@@ -2026,7 +2025,7 @@ elseif !exists('myprojects_enable')
 		let files = b:files
 		let message = filter(getbufline('%', 1, '$'), "v:val !~# '^" . escape(s:prompt, '[]') . "'")
 
-		silent! execute 'bwipeout ' . s:sid . 'svn'
+		silent! bwipeout
 
 		call map(files, "substitute(v:val, '^[^\\s]\\+\\s', '', '')")
 
@@ -2304,7 +2303,7 @@ elseif !exists('myprojects_enable')
 						call s:svn(svnCommand)
 						call s:message('Svn checkout of ''' . svn . ''' in ''' . myprojects[name]['attributes']['path'] . ''' done.')
 						call s:echo('Create project ''' . name . ''' from path ''' . myprojects[name]['attributes']['path'] . '''...')
-						call s:put(s:buildMyProjects('', filter, myprojects, '', indent), '', a:line)
+						call s:put(s:buildMyProjects('', filter, myprojects, '', indent), a:line)
 						call s:message('Project ''' . name . ''' created.')
 						call s:echo(s:getPath(a:line))
 					catch /.*/
@@ -2374,18 +2373,17 @@ elseif !exists('myprojects_enable')
 
 	" Function s:svnMarkAsResolved() {{{2
 	function s:svnMarkAsResolved(path)
-		let conflictAreResolved = s:input('All conflicts are resolved [yN] ? [y/N] : ', 'N')
+		let path = fnamemodify(bufname('%'), ':p')
 
-		if conflictAreResolved != 'y'
+		if s:input('All conflicts are resolved [yN] ? [y/N] : ', 'N') != 'y'
 			call s:echo('Conflicts not resolved on ''' . path . '''.')
 		else
-			let path = fnamemodify(bufname('%'), ':p')
-
 			try
 				call s:echo('Resolve conflicts on ''' . path . '''...')
 				call s:svn('resolved --non-interactive ' . shellescape(path))
 				call s:message('Conflicts resolved on ''' . path . '''.')
 				call s:refreshSvnConflictWindow(a:path)
+				execute 'au! ' . s:plugin . ' BufWritePost <buffer>'
 			catch /.*/
 				call s:svnError('Unable to resolve conflict for file ''' . path . ''':', v:exception)
 			endtry
@@ -2890,8 +2888,8 @@ elseif !exists('myprojects_enable')
 
 			let linesLength = len(lines)
 
-			if len(linesLength) <= 0
-				call s:error('No test file ''' . a:test . ''' found for ''' . a:path . ''')
+			if linesLength <= 0
+				call s:error('No test file ''' . a:test . ''' found for ''' . a:path . '''')
 			else
 				let line = 0
 
@@ -3047,7 +3045,6 @@ elseif !exists('myprojects_enable')
 		redraw
 
 		let prompt = s:getPromptedString(a:prompt)
-			call s:error(v:exception)
 
 		if a:0 == 0
 			return inputsecret(prompt)
