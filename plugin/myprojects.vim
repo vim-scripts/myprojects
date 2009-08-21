@@ -23,7 +23,7 @@ elseif !exists('myprojects_enable')
 	" Initialize variables {{{2
 	" Initialize script variables {{{3
 	let s:plugin = 'myprojects'
-	let s:version = '0.0.105'
+	let s:version = '0.0.106'
 	let s:copyright = '2009'
 	let s:author = 'Frédéric Hardy'
 	let s:email = 'myprojects.vim@mageekbox.net'
@@ -410,7 +410,21 @@ elseif !exists('myprojects_enable')
 	function s:createMyProjectsWindow(title, buffer, filetype)
 		let buffer = bufnr(s:sid . a:buffer)
 
-		if buffer == -1
+		if buffer != -1
+			let window = bufwinnr(buffer)
+
+			if window != -1
+				silent execute window . 'wincmd w'
+			else
+				silent execute 'botright new ' . s:sid . a:buffer
+
+				let &titlestring = s:prompt . a:title
+
+				silent execute 'setlocal statusline=' . escape(&titlestring, ' ') . '%=[%3p%%]'
+
+				let buffer = -1
+			endif
+		else
 			silent execute 'botright new ' . s:sid . a:buffer
 
 			setlocal buftype=nofile
@@ -419,7 +433,7 @@ elseif !exists('myprojects_enable')
 			setlocal noexpandtab
 			setlocal nolist
 			setlocal nomodeline
-			setlocal nonumber
+			setlocal number
 			setlocal noruler
 			setlocal nospell
 			setlocal noswapfile
@@ -448,33 +462,6 @@ elseif !exists('myprojects_enable')
 			endif
 
 			abclear <buffer>
-		else
-			let window = bufwinnr(buffer)
-
-			if window != -1
-				silent execute window . 'wincmd w'
-			else
-				silent execute 'botright new ' . s:sid . a:buffer
-
-				setlocal buftype=nofile
-				setlocal nobuflisted
-				setlocal nocursorcolumn
-				setlocal noexpandtab
-				setlocal nolist
-				setlocal nomodeline
-				setlocal nonumber
-				setlocal noruler
-				setlocal nospell
-				setlocal noswapfile
-				setlocal nowrap
-
-				call s:setLocal('cursorline', g:myprojects_cursorline)
-
-				let &titlestring = s:prompt . a:title
-
-				silent execute 'setlocal filetype=' . a:filetype
-				silent execute 'setlocal statusline=' . escape(&titlestring, ' ') . '%=[%3p%%]'
-			endif
 		endif
 
 		call s:setWindowHeight(0)
@@ -2468,9 +2455,7 @@ elseif !exists('myprojects_enable')
 		if a:path != ''
 			if !s:createBufferWindow('Buffers of project ''' . a:project . ''' in ''' . a:path . '''', a:project, a:path)
 				bwipeout
-				wincmd p
 			else
-				silent execute 'nnoremap <buffer> <silent> d :call <SID>deleteProjectBuffers(line(''.''), ''' . a:path .''')<CR>'
 				silent execute 'nnoremap <buffer> <silent> d :call <SID>deleteProjectBuffers(line(''.''), ''' . a:path .''')<CR>'
 
 				silent execute 'augroup ' . s:plugin
@@ -3237,7 +3222,7 @@ elseif !exists('myprojects_enable')
 		if !exists("*mkdir")
 			throw 'Unable to create directory ' . a:path . ', mkdir() function does not exist.')
 		else
-			 call mkdir(a:path, 'p', 0700)
+			 call mkdir(a:path, 'p')
 
 			if getftype(a:path) != 'dir'
 				throw 'Unable to create directory ' . a:path . '.')
